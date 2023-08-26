@@ -20,11 +20,6 @@ data_type_dict = {
     "float32": 0,
 }
 
-fastllm_weight_type_dict = {
-    "linear": 1,
-    "embedding": 2
-}
-
 v = np.random.randint(-127, 127, [10, 20])
 temp = v
 c_max = np.expand_dims(np.abs(v).max(axis = -1), -1)
@@ -38,8 +33,8 @@ def write_int8(fo, v):
     fo.write(struct.pack('i', 3))
     fo.write(struct.pack('i', 0))
     for i in range(c_max.shape[0]):
-        fo.write(struct.pack('f', -c_max[i][0]));
-        fo.write(struct.pack('f', c_max[i][0]));
+        fo.write(struct.pack('f', -c_max[i][0]))
+        fo.write(struct.pack('f', c_max[i][0]))
     fo.write(v.data)
 
 def write_int4(fo, v):
@@ -52,8 +47,8 @@ def write_int4(fo, v):
     fo.write(struct.pack('i', 8))
     fo.write(struct.pack('i', 0))
     for i in range(c_min.shape[0]):
-        fo.write(struct.pack('f', c_min[i][0]));
-        fo.write(struct.pack('f', c_max[i][0]));
+        fo.write(struct.pack('f', c_min[i][0]))
+        fo.write(struct.pack('f', c_max[i][0]))
     fo.write(v.data)
 
 def tofile(exportPath,
@@ -71,7 +66,7 @@ def tofile(exportPath,
     dict = model.state_dict()
     fo = open(exportPath, "wb")
 
-    # 1 model info
+    # 1. model info
     modelInfo = model.config.__dict__
     if ("model_type" not in modelInfo):
         print("unknown model_type.")
@@ -86,79 +81,62 @@ def tofile(exportPath,
     if (history_sep):
         modelInfo["history_sep"] = history_sep
 
+    # # of modelInfo, key-value pair
     fo.write(struct.pack('i', len(modelInfo)))
     for it in modelInfo.keys():
         writeKeyValue(fo, str(it), str(modelInfo[it]))
 
-    # 1. vocab
-    if (tokenizer):
-        if (hasattr(tokenizer, "sp_model")):
-            piece_size = tokenizer.sp_model.piece_size()
-            fo.write(struct.pack('i', piece_size))
-            for i in range(piece_size):
-                s = tokenizer.sp_model.id_to_piece(i).encode()
-                fo.write(struct.pack('i', len(s)))
-                for c in s:
-                    fo.write(struct.pack('i', c))
-                fo.write(struct.pack('i', i))
-        else:
-            vocab = tokenizer.get_vocab()
-            fo.write(struct.pack('i', len(vocab)))
-            for v in vocab.keys():
-                s = v.encode()
-                fo.write(struct.pack('i', len(s)))
-                for c in s:
-                    fo.write(struct.pack('i', c))
-                fo.write(struct.pack('i', vocab[v]))
-    else:
-        fo.write(struct.pack('i', 0))
+    # 2. vocab
+    # # of vocab, vocab length, vocab char, ID
+    vocab = tokenizer.get_vocab()
+    fo.write(struct.pack('i', len(vocab)))
+    for v in vocab.keys():
+        s = v.encode()
+        fo.write(struct.pack('i', len(s)))
+        for c in s:
+            fo.write(struct.pack('i', c))
+        fo.write(struct.pack('i', vocab[v]))
 
-    weight_type_dict = {}
-    module_dict = {}
+    # 3. weight
+    # # of weights, length of weight name, weight name, tensor.shape, tensor
+    weight_type_dict = {}  # weight_name:weight_type(linear,embedding)
     for key, m in model.named_modules():
         if (isinstance(m, torch.nn.Linear)):
             weight_type_dict[key + ".weight"] = "linear"
-            module_dict[key + ".weight"] = m
         if (isinstance(m, torch.nn.Embedding)):
             weight_type_dict[key] = "embedding"
-
-    # 2. weight
     fo.write(struct.pack('i', len(dict)))
     tot = 0
     for key in dict:
-        ori_data_type = 0
         ori_np_data_type = np.float32
-        cur_weight_type = 0
-        if (key in weight_type_dict and weight_type_dict[key] in fastllm_weight_type_dict):
-            cur_weight_type = fastllm_weight_type_dict[weight_type_dict[key]]
         to_data_type = 0
-        if (cur_weight_type == 1):
+        # 只对linear层做了量化
+        if (weight_type_dict.get(key, None) == "linear"):
             to_data_type = data_type_dict[dtype]
-            if (to_data_type == 7):
-                ori_data_type = 7
+            if (dtype == "fp16"):
                 ori_np_data_type = np.float16
+        tensor = dict[key].numpy().astype(ori_np_data_type)  # fp32->fp16有损失，转换成bf16？
 
-        cur = dict[key].numpy().astype(ori_np_data_type)
         fo.write(struct.pack('i', len(key)))
         fo.write(key.encode())
-        fo.write(struct.pack('i', len(cur.shape)))
-        for i in cur.shape:
+        fo.write(struct.pack('i', len(tensor.shape)))
+        for i in tensor.shape:
             fo.write(struct.pack('i', i))
         if (to_data_type == 3):
-            write_int8(fo, cur)
+            write_int8(fo, tensor)
         elif (to_data_type == 8):
-            write_int4(fo, cur)
+            write_int4(fo, tensor)
         else:
             fo.write(struct.pack('i', to_data_type))
-            fo.write(cur.data)
+            fo.write(tensor.data)   # tensor.data: 指向数组数据的内存缓冲区的指针
         tot += 1
         print("output (", tot, "/", len(dict), end = " )\r")
     print("\nfinish.")
     fo.close()
 
 if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True)
-    model = AutoModel.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True).float()
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf")
+    model = AutoModel.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf").float()
     model = model.eval()
 
     exportPath = sys.argv[1]
