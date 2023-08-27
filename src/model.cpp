@@ -37,8 +37,8 @@ namespace xllm {
         weight.embeddingNames.insert("model.embed_tokens.weight");
     }
 
-    LlamaModel::LlamaModel(const std::string &paramsPath, const std::string &tokenPath): LlamaModel() {        
-        LoadFromFile(paramsPath);
+    LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): LlamaModel() {        
+        LoadFromFile(weightPath);
         WarmUp();
     }
 }

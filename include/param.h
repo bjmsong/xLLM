@@ -13,17 +13,12 @@ struct Tokenizer {
     unsigned int vocab_size = 1;
     
     std::unordered_map<std::string, int> token_id;
-    std::vector<float> id_score;
     std::vector<std::string> id_token;
+    std::vector<float> id_score;
 
     Tokenizer (const std::string path);
 
-    ~Tokenizer() {};
-
-    Data Encode(const std::string &s, std::vector<int>& tokens);
-
-    std::string Decode(const Data &data);
-
+    void Encode(const std::string &s, std::vector<int>& tokens);
 };
 
 // struct WeightMap {

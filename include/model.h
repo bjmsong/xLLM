@@ -35,7 +35,7 @@ namespace xllm {
         std::mutex mainLoopLocker, dictLocker;
 
         LlamaModel ();
-        LlamaModel (const std::string &paramsPath, const std::string &tokenPath);
+        LlamaModel (const std::string &weightPath, const std::string &tokenPath);
         
         void LoadFromFile(const std::string &fileName); // 从文件读取
 

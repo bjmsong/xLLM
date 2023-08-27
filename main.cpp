@@ -2,7 +2,7 @@
 #include "xllm.h"
 
 struct RunConfig {
-    std::string paramsPath = "/root/autodl-tmp/llama2_7b_chat.bin";  // 模型文件路径
+    std::string weightPath = "/root/autodl-tmp/llama2_7b_chat.bin";  // 模型文件路径
     std::string tokenPath = "/root/autodl-tmp/tokenizer.bin";
     int threads = 4; // 使用的线程数
     bool lowMemMode = false; // 是否使用低内存模式
@@ -29,8 +29,8 @@ void ParseArgs(int argc, char **argv, RunConfig &config, xllm::GenerationConfig 
         if (sargv[i] == "-h" || sargv[i] == "--help") {
             Usage();
             exit(0);
-        } else if (sargv[i] == "-p" || sargv[i] == "--path") {
-            config.paramsPath = sargv[++i];
+        } else if (sargv[i] == "--weight") {
+            config.weightPath = sargv[++i];
         } else if (sargv[i] == "--token") {
             config.tokenPath = sargv[++i];
         } else if (sargv[i] == "-t" || sargv[i] == "--threads") {
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 
     xllm::PrintInstructionInfo();
     xllm::SetThreads(config.threads);
-    xllm::LlamaModel* model = new xllm::LlamaModel(config.paramsPath, config.tokenPath);
+    xllm::LlamaModel* model = new xllm::LlamaModel(config.weightPath, config.tokenPath);
 
     printf("输入内容对话，reset清空历史记录，stop退出程序.\n");
     while (true) {

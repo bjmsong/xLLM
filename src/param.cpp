@@ -19,8 +19,9 @@ namespace xllm{
         }
     }
     
-    Data Tokenizer::Encode(const std::string &s, std::vector<int>& tokens) {
+    void Tokenizer::Encode(const std::string &s, std::vector<int>& tokens_output) {
 
+        std::vector<int> tokens;
         // first encode every individual byte in the input string
         for (char c: s) 
             tokens.push_back(token_id[std::string{c}]);
@@ -32,19 +33,23 @@ namespace xllm{
             int best_id = -1;
             int best_idx = -1;
 
+            std::string merString;
             for (int i=0; i < n_tokens-1; i++) {
-                int id = token_id[id_token[tokens[i]] + id_token[tokens[i+1]]];
-                if (id_score[id] > best_score) {
-                    // this merge pair exists in vocab! record its score and position
-                    best_score = id_score[id];
-                    best_id = id;
-                    best_idx = i;
+                merString = id_token[tokens[i]] + id_token[tokens[i+1]];
+                auto it = token_id.find(merString);
+                if (it != token_id.end()){
+                    int id = token_id[merString];
+                    if (id_score[id] > best_score) {
+                        // this merge pair exists in vocab! record its score and position
+                        best_score = id_score[id];
+                        best_id = id;
+                        best_idx = i;
+                    }
                 }
             }
 
-            if (best_idx == -1) {
+            if (best_idx == -1)
                 break; // we couldn't find any more pairs to merge, so we're done
-            }
 
             // merge the consecutive pair (best_idx, best_idx+1) into new token best_id
             tokens[best_idx] = best_id;
@@ -54,6 +59,8 @@ namespace xllm{
             }
             n_tokens--; // token length decreased
         }
+
+        for(int i=0; i<n_tokens; i++)
+            tokens_output.push_back(tokens[i]);
     }
-    
 }

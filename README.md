@@ -18,5 +18,5 @@ make -j4
 
 3. 运行
 ```bash
-./main --path /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin
+./main --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin
 ```
