@@ -16,7 +16,7 @@ namespace xllm{
         int ReadInt() {
             int v;
             if (fread(&v, 1, 4, f) != 4) {
-                ErrorInFastLLM("FileReader.ReadInt error.\n");
+                ErrorInXLLM("FileReader.ReadInt error.\n");
             };
             return v;
         }
@@ -24,7 +24,7 @@ namespace xllm{
         float ReadFloat() {
             float v;
             if (fread(&v, 1, 4, f) != 4) {
-                ErrorInFastLLM("FileReader.ReadFloat error.\n");
+                ErrorInXLLM("FileReader.ReadFloat error.\n");
             };
             return v;
         }
@@ -35,14 +35,14 @@ namespace xllm{
             char *v = new char[len + 5];
             v[len] = 0;
             if (fread(v, 1, len, f) != len) {
-                ErrorInFastLLM("FileReader.ReadString error.\n");
+                ErrorInXLLM("FileReader.ReadString error.\n");
             }
             return v;
         }
 
         void ReadBytes(uint8_t *buffer, uint64_t bytes) {
             if (fread(buffer, 1, bytes, f) != bytes) {
-                ErrorInFastLLM("FileReader.ReadBytes error.\n");
+                ErrorInXLLM("FileReader.ReadBytes error.\n");
             }
         }
 
@@ -60,26 +60,26 @@ namespace xllm{
 
         void WriteInt(int v) {
             if (fwrite(&v, 1, 4, f) != 4) {
-                ErrorInFastLLM("FileWriter.WriteInt error.\n");
+                ErrorInXLLM("FileWriter.WriteInt error.\n");
             };
         }
 
         void WriteFloat(float v) {
             if (fwrite(&v, 1, 4, f) != 4) {
-                ErrorInFastLLM("FileWriter.WriteFloat error.\n");
+                ErrorInXLLM("FileWriter.WriteFloat error.\n");
             };
         }
 
         void WriteString(const std::string &s) {
             WriteInt((int)s.size());
             if (fwrite(s.c_str(), 1, (int)s.size(), f) != (int)s.size()) {
-                ErrorInFastLLM("FileWriter.WriteString Error.\n");
+                ErrorInXLLM("FileWriter.WriteString Error.\n");
             }
         }
 
         void WriteBytes(uint8_t *buffer, uint64_t bytes) {
             if (fwrite(buffer, 1, bytes, f) != bytes) {
-                ErrorInFastLLM("FileWriter.WriteBytes error.\n");
+                ErrorInXLLM("FileWriter.WriteBytes error.\n");
             }
         }
 

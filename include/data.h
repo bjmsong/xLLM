@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <cstring>
 #include "file.h"
 
 namespace xllm{
@@ -40,7 +41,7 @@ class Data {
         // data中是原始数据，如果type不是float那么需要量化
         Data (DataType type, const std::vector <int> &dims, const std::vector <float> &data);
 
-        ~Data(); // 析构函数
+        ~Data() {}; // 析构函数
 
         Data (const Data &ori); // 深拷贝
 
