@@ -1,5 +1,5 @@
 import sys
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoModel
 
 import struct
 import numpy as np
@@ -53,7 +53,6 @@ def write_int4(fo, v):
 
 def tofile(exportPath,
            model,
-           tokenizer = None,
            pre_prompt = None,
            user_role = None,
            bot_role = None,
@@ -81,21 +80,21 @@ def tofile(exportPath,
     if (history_sep):
         modelInfo["history_sep"] = history_sep
 
-    # # of modelInfo, key-value pair
+    # # of modelInfo, key-value pairs
     fo.write(struct.pack('i', len(modelInfo)))
     for it in modelInfo.keys():
         writeKeyValue(fo, str(it), str(modelInfo[it]))
 
     # 2. vocab
     # # of vocab, vocab length, vocab char, ID
-    vocab = tokenizer.get_vocab()
-    fo.write(struct.pack('i', len(vocab)))
-    for v in vocab.keys():
-        s = v.encode()
-        fo.write(struct.pack('i', len(s)))
-        for c in s:
-            fo.write(struct.pack('i', c))
-        fo.write(struct.pack('i', vocab[v]))
+    # vocab = tokenizer.get_vocab()
+    # fo.write(struct.pack('i', len(vocab)))
+    # for v in vocab.keys():
+    #     s = v.encode()
+    #     fo.write(struct.pack('i', len(s)))
+    #     for c in s:
+    #         fo.write(struct.pack('i', c))
+    #     fo.write(struct.pack('i', vocab[v]))
 
     # 3. weight
     # # of weights, length of weight name, weight name, tensor.shape, tensor
@@ -135,9 +134,8 @@ def tofile(exportPath,
     fo.close()
 
 if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf")
     model = AutoModel.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf").float()
     model = model.eval()
 
     exportPath = sys.argv[1]
-    tofile(exportPath, model, tokenizer)
+    tofile(exportPath, model)
