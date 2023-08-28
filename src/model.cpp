@@ -5,11 +5,8 @@ namespace xllm {
     LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): 
         weight(weightPath), tokenizer(tokenPath) {      
         
-        // TODO:下面是alpaca的提示词和instruction
-        this->pre_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n";
-        this->user_role = "### Instruction:\n";
-        this->bot_role = "\n\n### Response:";
-        this->history_sep = "</s>";
+        pre_prompt = "";
+        history_sep = "</s>";
 
         block_cnt = 32;
         rotary_dim = 128;
@@ -42,7 +39,8 @@ namespace xllm {
     }
 
     std::string LlamaModel::MakeInput(const std::string &history, int round, const std::string &input) {
-        return (round == 0 ? pre_prompt : history) + user_role + input + bot_role;
+        std::string input_trim = trim(input);
+        return (round == 0 ? pre_prompt : history) + B_INST + input_trim + E_INST;
     }
 
     std::string LlamaModel::Response(const std::string& input, RuntimeResult retCb,
@@ -50,7 +48,7 @@ namespace xllm {
 
         auto st = std::chrono::system_clock::now();
 
-        Data inputIds = tokenizer.Encode(input);
+        Data inputIds = tokenizer.Encode(input, true);
 
         std::vector <float> ids;
         for (int i = 0; i < inputIds.Count(0); i++) {
@@ -93,7 +91,7 @@ namespace xllm {
             }
 
             results.push_back(ret);
-            std::string curString = weight.tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results)).c_str();
+            std::string curString = tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results)).c_str();
             retString += curString;
             if (retCb)
 #ifdef PY_API

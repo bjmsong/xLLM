@@ -11,19 +11,22 @@ namespace xllm {
 struct Tokenizer {
 
     unsigned int vocab_size = 1;
-    
+    int bos_id, eos_id;
+
     std::unordered_map<std::string, int> token_id;
     std::vector<std::string> id_token;
     std::vector<float> id_score;
 
     Tokenizer (const std::string path);
 
-    Data Encode(const std::string &s);
+    Data Encode(const std::string &s, bool bos = false, bool eos = false);
+
+    std::string Decode(const Data& data);
 };
 
 struct WeightMap {
 
-    std::unordered_map <std::string, std::string> dicts;
+    std::unordered_map <std::string, std::string> params;
 
     std::map <std::string, Data> weight;
 

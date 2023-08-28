@@ -6,6 +6,8 @@ namespace xllm{
     Tokenizer::Tokenizer(const std::string path){
         FileReader reader(path);
         vocab_size = reader.ReadInt();
+        bos_id = reader.ReadInt();
+        eos_id = reader.ReadInt();
 
         float score;
         std::string token;
@@ -18,7 +20,7 @@ namespace xllm{
         }
     }
     
-    Data Tokenizer::Encode(const std::string &s) {
+    Data Tokenizer::Encode(const std::string &s, bool bos, bool eos) {
 
         std::vector<int> tokens;
         // first encode every individual byte in the input string
@@ -59,12 +61,28 @@ namespace xllm{
         }
 
         std::vector<float> tokens_output;
+        if(bos)
+            tokens_output.push_back(bos_id);
         for(int i=0; i<n_tokens; i++)
             tokens_output.push_back(tokens[i]);
-
-        return Data(DataType::FLOAT32, {n_tokens}, tokens_output);
+        if(eos)
+            tokens_output.push_back(eos_id);
+        
+        return Data(DataType::FLOAT32, {n_tokens + bos + eos}, tokens_output);
     }
         
+
+    std::string Tokenizer::Decode(const Data& data) {
+        std::vector <int> tokens;
+        for (int i = 0; i < data.counts; i++) {
+            tokens.push_back((int) ((float *) data.cpuData)[i]);
+        }
+
+        
+
+        return "";
+    }
+
     WeightMap::WeightMap(const std::string &fileName){
         FileReader buffer(fileName);
 
@@ -72,10 +90,10 @@ namespace xllm{
         for (int i = 0; i < keyValueLen; i++) {
             std::string key = buffer.ReadString();
             std::string value = buffer.ReadString();
-            dicts[key] = value;
+            params[key] = value;
         }
 
-        for(auto& pair:dicts)
+        for(auto& pair:params)
             std::cout << "Key: " << pair.first << " Value: " << pair.second << std::endl;
     
         int weightLen = buffer.ReadInt();
