@@ -2,13 +2,14 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <iostream>
 #include "file.h"
 #include "utils.h"
 
 namespace xllm{
 
 enum DataType {
-    FLOAT32 = 0, BFLOAT16 = 1, INT8 = 3, INT4 = 4, FLOAT16 = 7
+    FLOAT32 = 0, BFLOAT16 = 1, INT8 = 3, INT4_NOZERO = 8, FLOAT16 = 7
 };
 
 enum WeightType {
@@ -33,6 +34,7 @@ class Data {
 
         uint8_t *cpuData = nullptr; // 数据指针
 
+        Data() {};
         Data (DataType type, const std::vector <int> &dims); // 构造函数
         // data中是原始数据，如果type不是float那么需要量化
         Data (DataType type, const std::vector <int> &dims, const std::vector <float> &data);

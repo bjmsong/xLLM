@@ -3,7 +3,7 @@
 
 using namespace xllm;
 
-TEST(test_tokenizer, test_tokenizer1) {
+TEST(test_tokenizer, Encode1) {
     Tokenizer tokenizer("/root/autodl-tmp/tokenizer.bin");
     std::vector<int> tokens;
     tokenizer.Encode("hello world!", tokens);
@@ -13,7 +13,7 @@ TEST(test_tokenizer, test_tokenizer1) {
     // ASSERT_EQ(tokens[2], 36);
 }
 
-TEST(test_tokenizer, test_tokenizer2) {
+TEST(test_tokenizer, Encode2) {
     Tokenizer tokenizer("/root/autodl-tmp/tokenizer.bin");
     std::vector<int> tokens;
     tokenizer.Encode("what is the recipe of mayonnaise?", tokens);
@@ -31,6 +31,6 @@ TEST(test_tokenizer, test_tokenizer2) {
 }
 
 
-TEST(test_data, test_data1) {
-
+TEST(test_weightmap, LoadFromFile) {
+    WeightMap weightmap("/root/autodl-tmp/llama2_7b_chat.bin");
 }

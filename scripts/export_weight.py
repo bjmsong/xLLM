@@ -18,6 +18,7 @@ data_type_dict = {
     "int8": 3,
     "float16": 7,
     "float32": 0,
+    "bfloat16": 1,
 }
 
 v = np.random.randint(-127, 127, [10, 20])

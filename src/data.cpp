@@ -12,7 +12,7 @@ namespace xllm{
         } else if (dataType == DataType::INT8) {
             unitSize = 1;
             unitSizeDiv = 1;
-        } else if (dataType == DataType::INT4) {
+        } else if (dataType == DataType::INT4_NOZERO) {
             unitSize = 1;
             unitSizeDiv = 2;
         }

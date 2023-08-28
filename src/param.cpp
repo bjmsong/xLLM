@@ -35,8 +35,7 @@ namespace xllm{
             std::string merString;
             for (int i=0; i < n_tokens-1; i++) {
                 merString = id_token[tokens[i]] + id_token[tokens[i+1]];
-                auto it = token_id.find(merString);
-                if (it != token_id.end()){
+                if (token_id.find(merString) != token_id.end()){
                     int id = token_id[merString];
                     if (id_score[id] > best_score) {
                         // this merge pair exists in vocab! record its score and position
@@ -61,5 +60,47 @@ namespace xllm{
 
         for(int i=0; i<n_tokens; i++)
             tokens_output.push_back(tokens[i]);
+    }
+
+    WeightMap::WeightMap(const std::string &fileName){
+        FileReader buffer(fileName);
+
+        int keyValueLen = buffer.ReadInt();
+        for (int i = 0; i < keyValueLen; i++) {
+            std::string key = buffer.ReadString();
+            std::string value = buffer.ReadString();
+            dicts[key] = value;
+        }
+
+        for(auto& pair:dicts)
+            std::cout << "Key: " << pair.first << " Value: " << pair.second << std::endl;
+            
+        int weightLen = buffer.ReadInt();
+        for (int i = 0; i < weightLen; i++) {
+            std::string name = buffer.ReadString();
+            //printf("%s\n", name.c_str());
+            int dimsSize = buffer.ReadInt();
+            //printf("size = %d\n", dimsSize);
+            std::vector <int> dims;
+            for (int j = 0; j < dimsSize; j++) {
+                int x = buffer.ReadInt();
+                dims.push_back(x);
+            }
+            DataType dataType = (DataType)buffer.ReadInt();
+            weight[name] = Data(dataType, dims);
+            weight[name].Allocate();
+            if (dataType == DataType::FLOAT32 || dataType == DataType::BFLOAT16 || dataType == DataType::FLOAT16) {
+                buffer.ReadBytes(weight[name].cpuData, weight[name].bytes);
+            }
+
+            printf("Load (%d / %d) \r", (i + 1), weightLen);
+            fflush(stdout);
+        }
+        printf("\n");
+        fflush(stdout);
+    }
+
+    Data &WeightMap::operator[](const std::string &key) {
+        return weight[key];
     }
 }
