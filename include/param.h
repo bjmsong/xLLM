@@ -9,7 +9,6 @@ namespace xllm {
 
 struct Tokenizer {
 
-    int max_token_length = 1;
     unsigned int vocab_size = 1;
     
     std::unordered_map<std::string, int> token_id;

@@ -6,7 +6,6 @@ namespace xllm{
     Tokenizer::Tokenizer(const std::string path){
         FileReader reader(path);
         vocab_size = reader.ReadInt();
-        max_token_length = reader.ReadInt();
 
         float score;
         std::string token;

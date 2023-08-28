@@ -24,10 +24,9 @@ namespace xllm {
         int block_cnt = 28;
 
         std::vector<std::vector<float> > sin, cos;
+        Data sinData, cosData;
 
         WeightMap weight; // 权重
-
-        Data sinData, cosData;
 
         ResponseContextDict responseContextDict;
 

@@ -38,17 +38,18 @@ def write_int8(fo, v):
     fo.write(v.data)
 
 def write_int4(fo, v):
-    c_min = np.expand_dims(v.min(axis = -1), -1)
-    c_max = np.expand_dims(v.max(axis = -1), -1)
-    c_scale = (c_max - c_min) / 15.0
+    c_min = np.expand_dims(-np.abs(v).max(axis = -1), -1)
+    c_max = np.expand_dims(np.abs(v).max(axis = -1), -1)
+    c_scale = c_max / 7.0
+    c_min = c_scale * -8.0
     v = (v - c_min) / c_scale
     v = (v + 0.5).astype(np.int8).clip(0, 15).astype(np.uint8)
     v = v[:, 0::2] * 16 + v[:, 1::2]
     fo.write(struct.pack('i', 8))
     fo.write(struct.pack('i', 0))
     for i in range(c_min.shape[0]):
-        fo.write(struct.pack('f', c_min[i][0]))
-        fo.write(struct.pack('f', c_max[i][0]))
+        fo.write(struct.pack('f', c_min[i][0]));
+        fo.write(struct.pack('f', c_max[i][0]));
     fo.write(v.data)
 
 def tofile(exportPath,
@@ -112,7 +113,7 @@ def tofile(exportPath,
         # 只对linear层做了量化
         if (weight_type_dict.get(key, None) == "linear"):
             to_data_type = data_type_dict[dtype]
-            if (dtype == "fp16"):
+            if (dtype == "float16"):
                 ori_np_data_type = np.float16
         tensor = dict[key].numpy().astype(ori_np_data_type)  # fp32->fp16有损失，转换成bf16？
 

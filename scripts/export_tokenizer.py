@@ -35,14 +35,10 @@ class Tokenizer:
 
             tokens.append(b)
             scores.append(s)
-        
-        # record the max token length
-        max_token_length = max(len(t) for t in tokens)
 
         # write to a binary file
         with open(exportPath, 'wb') as f:
             f.write(struct.pack("I", self.n_words))
-            f.write(struct.pack("I", max_token_length))
             for bytes, score in zip(tokens, scores):
                 f.write(struct.pack("fI", score, len(bytes)))
                 f.write(bytes)

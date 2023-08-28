@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 #include "file.h"
+#include "utils.h"
 
 namespace xllm{
 
@@ -19,7 +20,7 @@ class Data {
         WeightType weightType = WeightType::NONE; // 权重类型，NONE代表非权重（或未知权重）
 
         DataType dataType = DataType::FLOAT32; // 数据类型
-        int unitSize;         // dataType占几个字节
+        int unitSize = 4;         // dataType占几个字节
         int unitSizeDiv = 1;  // unitSIze / unitSizeDiv: 单个元素占几个字节
 
         std::vector <int> dims; // 数据形状
@@ -32,24 +33,17 @@ class Data {
 
         uint8_t *cpuData = nullptr; // 数据指针
 
-        std::string fileName;
-        long long filePos;
-
-        Data () {};
-        Data (DataType type);
         Data (DataType type, const std::vector <int> &dims); // 构造函数
         // data中是原始数据，如果type不是float那么需要量化
         Data (DataType type, const std::vector <int> &dims, const std::vector <float> &data);
 
-        ~Data() {}; // 析构函数
+        ~Data(); 
 
         Data (const Data &ori); // 深拷贝
 
         void CopyFrom(const Data &ori); // 复制
 
         void Allocate(); // 分配内存
-
-        uint64_t Count(int i) const; // dims[i] * strides[i]
 
         void Expansion(const std::vector <int> &dims); // 预扩容到相应尺寸
 
