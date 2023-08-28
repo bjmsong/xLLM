@@ -39,7 +39,6 @@ namespace xllm{
 
     Data::Data(DataType type, const std::vector<int> &dims, const std::vector<float> &data) : Data::Data(type, dims) {
         Allocate();
-        // TODO: 为什么只有FLOAT32 ?
         if (type == DataType::FLOAT32) {
             memcpy(cpuData, data.data(), bytes);
         }

@@ -18,7 +18,7 @@ namespace xllm{
         }
     }
     
-    void Tokenizer::Encode(const std::string &s, std::vector<int>& tokens_output) {
+    Data Tokenizer::Encode(const std::string &s) {
 
         std::vector<int> tokens;
         // first encode every individual byte in the input string
@@ -58,10 +58,13 @@ namespace xllm{
             n_tokens--; // token length decreased
         }
 
+        std::vector<float> tokens_output;
         for(int i=0; i<n_tokens; i++)
             tokens_output.push_back(tokens[i]);
-    }
 
+        return Data(DataType::FLOAT32, {n_tokens}, tokens_output);
+    }
+        
     WeightMap::WeightMap(const std::string &fileName){
         FileReader buffer(fileName);
 
@@ -74,7 +77,7 @@ namespace xllm{
 
         for(auto& pair:dicts)
             std::cout << "Key: " << pair.first << " Value: " << pair.second << std::endl;
-            
+    
         int weightLen = buffer.ReadInt();
         for (int i = 0; i < weightLen; i++) {
             std::string name = buffer.ReadString();

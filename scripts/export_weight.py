@@ -116,7 +116,7 @@ def tofile(exportPath,
             to_data_type = data_type_dict[dtype]
             if (dtype == "float16"):
                 ori_np_data_type = np.float16
-        tensor = dict[key].numpy().astype(ori_np_data_type)  # fp32->fp16有损失，转换成bf16？
+        tensor = dict[key].numpy().astype(ori_np_data_type)  # TODO: fp32->fp16有损失，转换成bf16
 
         fo.write(struct.pack('i', len(key)))
         fo.write(key.encode())

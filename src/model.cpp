@@ -1,8 +1,11 @@
 #include "model.h"
 
 namespace xllm {
-    LlamaModel::LlamaModel() {
-        // 默认使用alpaca的提示词和instruction
+
+    LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): 
+        weight(weightPath), tokenizer(tokenPath) {      
+        
+        // TODO:下面是alpaca的提示词和instruction
         this->pre_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n";
         this->user_role = "### Instruction:\n";
         this->bot_role = "\n\n### Response:";
@@ -34,11 +37,115 @@ namespace xllm {
         }
         sinData.CopyFrom(Data(DataType::FLOAT32, {(int)this->sin.size(), (int)this->sin[0].size()}, fsin));
         cosData.CopyFrom(Data(DataType::FLOAT32, {(int)this->cos.size(), (int)this->cos[0].size()}, fcos));
-        weight.embeddingNames.insert("model.embed_tokens.weight");
+        
+        WarmUp();
     }
 
-    LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): LlamaModel() {        
-        LoadFromFile(weightPath);
-        WarmUp();
+    std::string LlamaModel::MakeInput(const std::string &history, int round, const std::string &input) {
+        return (round == 0 ? pre_prompt : history) + user_role + input + bot_role;
+    }
+
+    std::string LlamaModel::Response(const std::string& input, RuntimeResult retCb,
+                                     const GenerationConfig &generationConfig) {
+
+        auto st = std::chrono::system_clock::now();
+
+        Data inputIds = tokenizer.Encode(input);
+
+        std::vector <float> ids;
+        for (int i = 0; i < inputIds.Count(0); i++) {
+            ids.push_back(((float*)inputIds.cpuData)[i]);
+        }
+        int seqLen = ids.size();
+        inputIds.CopyFrom(Data(DataType::FLOAT32, {1, seqLen}, ids));
+
+        std::vector <float> vmask = std::vector <float> (seqLen * seqLen, 0);
+        std::vector <float> vpids = std::vector <float> (seqLen, 0);
+        for (int i = 0; i < seqLen; i++) {
+            vpids[i] = i;
+            for (int j = i + 1; j < seqLen; j++) {
+                vmask[i * seqLen + j] = 1;
+            }
+        }
+
+        Data attentionMask = Data(DataType::FLOAT32, {seqLen, seqLen}, vmask);
+        Data positionIds = Data(DataType::FLOAT32, {1, seqLen}, vpids);
+
+        std::vector <std::pair <Data, Data> > pastKeyValues;
+        for (int i = 0; i < block_cnt; i++) {
+            pastKeyValues.push_back(std::make_pair(Data(DataType::FLOAT32),
+                                                   Data(DataType::FLOAT32)));
+        }
+
+        std::string retString = "";
+        int len = seqLen;
+        std::vector <float> results;
+        int index = 0;
+
+        LastTokensManager tokens (1, generationConfig.last_n);
+        while (true) {
+            auto st = std::chrono::system_clock::now();
+
+            int ret = Forward(inputIds, attentionMask, positionIds, pastKeyValues, generationConfig, tokens);
+            tokens.units[0].Push(ret);
+            if (ret == eos_token_id) {
+                break;
+            }
+
+            results.push_back(ret);
+            std::string curString = weight.tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results)).c_str();
+            retString += curString;
+            if (retCb)
+#ifdef PY_API
+			{
+				if(generationConfig.enable_hash_id){
+					std::stringstream ss;
+					ss << retString << "hash_id:"<<hash_id;
+					retCb(index, pybind11::bytes(ss.str()));
+				}else{
+					retCb(index, pybind11::bytes(retString));
+				}
+			}
+#else
+                retCb(index, curString.c_str());
+#endif
+            index++;
+
+            if (index == generationConfig.output_token_limit) {
+                break;
+            }
+            results.clear();
+
+            attentionMask.ToDevice(DataDevice::CPU);
+            positionIds.ToDevice(DataDevice::CPU);
+            inputIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)ret}));
+            attentionMask = Data();
+            positionIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)len}));
+            //if (do_sample) {
+            //    tokenPenaltyManager.InsertToken(ret);
+            //}
+            len++;
+            if (index == generationConfig.output_token_limit) {
+                break;
+            }
+
+            printf("spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
+        }
+        if (retCb)
+#ifdef PY_API
+		{
+			if(generationConfig.enable_hash_id){
+				std::stringstream ss;
+				ss << retString << "hash_id:"<<hash_id;
+				retCb(-1, pybind11::bytes(ss.str()));
+			}else{
+				retCb(-1, pybind11::bytes(retString));
+			}
+		}
+#else
+            retCb(-1, retString.c_str());
+#endif
+
+        return retString;
     }
 }

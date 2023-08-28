@@ -64,9 +64,9 @@ int main(int argc, char **argv) {
 
     xllm::PrintInstructionInfo();
     xllm::SetThreads(config.threads);
-    xllm::LlamaModel* model = new xllm::LlamaModel(config.weightPath, config.tokenPath);
+    std::unique_ptr<xllm::LlamaModel> model = std::make_unique<xllm::LlamaModel>(config.weightPath, config.tokenPath);
 
-    printf("输入内容对话，reset清空历史记录，stop退出程序.\n");
+    printf("输入内容对话, reset清空历史记录, stop退出程序.\n");
     while (true) {
         printf("用户: ");
         std::string input;

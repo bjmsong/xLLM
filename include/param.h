@@ -18,7 +18,7 @@ struct Tokenizer {
 
     Tokenizer (const std::string path);
 
-    void Encode(const std::string &s, std::vector<int>& tokens);
+    Data Encode(const std::string &s);
 };
 
 struct WeightMap {
@@ -26,8 +26,6 @@ struct WeightMap {
     std::unordered_map <std::string, std::string> dicts;
 
     std::map <std::string, Data> weight;
-
-    std::set <std::string> embeddingNames;
 
     WeightMap(const std::string &fileName);
 

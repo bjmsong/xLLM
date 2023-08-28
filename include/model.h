@@ -4,7 +4,9 @@
 #include "cmath"
 #include <iostream>
 
+#include "utils.h"
 #include "data.h"
+#include "param.h"
 #include "xllm.h"
 
 namespace xllm {
@@ -26,18 +28,16 @@ namespace xllm {
         std::vector<std::vector<float> > sin, cos;
         Data sinData, cosData;
 
-        WeightMap weight; // 权重
+        Tokenizer tokenizer;
+        WeightMap weight;
 
         ResponseContextDict responseContextDict;
 
         std::thread *mainLoop = nullptr;
         std::mutex mainLoopLocker, dictLocker;
 
-        LlamaModel ();
         LlamaModel (const std::string &weightPath, const std::string &tokenPath);
         
-        void LoadFromFile(const std::string &fileName); // 从文件读取
-
         void InitParams(); // 初始化参数信息
 
         // 推理
@@ -52,11 +52,6 @@ namespace xllm {
         std::string Response(const std::string& input,
                                      RuntimeResult retCb,
                                      const GenerationConfig &generationConfig = GenerationConfig()); // 根据给出的内容回复
-
-        int LaunchResponseTokens(const std::vector <int> &inputTokens,
-                                         const GenerationConfig &generationConfig = GenerationConfig()); // 启动一个response任务，返回分配的handleId
-
-        int FetchResponseTokens(int handelId); // 获取指定handle的输出, -1代表输出结束了
 
         void WarmUp(); // 预热
 
