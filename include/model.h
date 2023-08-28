@@ -12,9 +12,8 @@
 namespace xllm {
     class LlamaModel {
     public:
-        std::string pre_prompt; // 最初对话的提示语
-        std::string user_role, bot_role, history_sep; // 用于生成每一轮的prompt
-        const std::string B_INST{"[INST] "}, E_INST{" [/INST]"};
+        std::string pre_prompt; // 系统设定
+        const std::string B_INST{"[INST] "}, E_INST{" [/INST]"}, EOS{""};
 
         int bos_token_id;
         int eos_token_id;
@@ -50,14 +49,14 @@ namespace xllm {
                 const GenerationConfig &generationConfig = GenerationConfig(),
                 const LastTokensManager &lastTokens = LastTokensManager());
 
-        std::string Response(const std::string& input,
+        std::string Response(const std::vector<float>& input,
                                      RuntimeResult retCb,
                                      const GenerationConfig &generationConfig = GenerationConfig()); // 根据给出的内容回复
 
         void WarmUp(); // 预热
 
-        std::string MakeInput(const std::string &history, int round, const std::string &input); // 根据历史信息和当前输入生成prompt
+        std::vector<float> MakeInput(std::vector<float> &history, int round, const std::string &input); // 根据历史信息和当前输入生成prompt
 
-        std::string MakeHistory(const std::string &history, int round, const std::string &input, const std::string &output); // 根据当前回复更新history
+        void MakeHistory(std::vector<float> &history, int round, const std::string &input, const std::string &output); // 根据当前回复更新history
     };
 }

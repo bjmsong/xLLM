@@ -56,7 +56,7 @@ void ParseArgs(int argc, char **argv, RunConfig &config, xllm::GenerationConfig 
 
 int main(int argc, char **argv) {
     int round = 0;
-    std::string history = "";
+    std::vector<float> history;
 
     RunConfig config;
     xllm::GenerationConfig generationConfig;
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
         std::string input;
         std::getline(std::cin, input);
         if (input == "reset") {
-            history = "";
+            history.clear();
             round = 0;
             continue;
         }
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
                 printf("\n");
             }
         }, generationConfig);
-        history = model->MakeHistory(history, round, input, ret);
+        model->MakeHistory(history, round, input, ret);
         round++;
     }
 

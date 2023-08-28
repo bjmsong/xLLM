@@ -20,7 +20,7 @@ namespace xllm{
         }
     }
     
-    Data Tokenizer::Encode(const std::string &s, bool bos, bool eos) {
+    std::vector<float> Tokenizer::Encode(const std::string &s, bool bos, bool eos) {
 
         std::vector<int> tokens;
         // first encode every individual byte in the input string
@@ -68,7 +68,7 @@ namespace xllm{
         if(eos)
             tokens_output.push_back(eos_id);
         
-        return Data(DataType::FLOAT32, {n_tokens + bos + eos}, tokens_output);
+        return tokens_output;
     }
         
 

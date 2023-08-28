@@ -38,24 +38,30 @@ namespace xllm {
         WarmUp();
     }
 
-    std::string LlamaModel::MakeInput(const std::string &history, int round, const std::string &input) {
+    std::vector<float> LlamaModel::MakeInput(std::vector<float> &history, int round, const std::string &input) {
         std::string input_trim = trim(input);
-        return (round == 0 ? pre_prompt : history) + B_INST + input_trim + E_INST;
+        std::string prompt = (round == 0 ? pre_prompt : "") + B_INST + input_trim + E_INST;
+        std::vector<float> inputIds = tokenizer.Encode(input, true);
+        history.insert(history.end(), inputIds.begin(), inputIds.end());
+        return history;
     }
 
-    std::string LlamaModel::Response(const std::string& input, RuntimeResult retCb,
+    void LlamaModel::MakeHistory(std::vector<float> &history, int round, const std::string &input, const std::string &output) {
+        std::string input_trim = trim(input);
+        std::string output_trim = trim(output);
+        std::string last =  B_INST + input_trim + E_INST + output_trim;
+        std::vector<float> lastchat = tokenizer.Encode(last, true ,true);
+        history.insert(history.end(), lastchat.begin(), lastchat.end());
+    }
+
+    std::string LlamaModel::Response(const std::vector<float>& input, RuntimeResult retCb,
                                      const GenerationConfig &generationConfig) {
 
         auto st = std::chrono::system_clock::now();
 
-        Data inputIds = tokenizer.Encode(input, true);
-
         std::vector <float> ids;
-        for (int i = 0; i < inputIds.Count(0); i++) {
-            ids.push_back(((float*)inputIds.cpuData)[i]);
-        }
-        int seqLen = ids.size();
-        inputIds.CopyFrom(Data(DataType::FLOAT32, {1, seqLen}, ids));
+        int seqLen = input.size();
+        Data inputIds(DataType::FLOAT32, {1, seqLen}, input);
 
         std::vector <float> vmask = std::vector <float> (seqLen * seqLen, 0);
         std::vector <float> vpids = std::vector <float> (seqLen, 0);

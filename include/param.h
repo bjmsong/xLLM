@@ -19,7 +19,7 @@ struct Tokenizer {
 
     Tokenizer (const std::string path);
 
-    Data Encode(const std::string &s, bool bos = false, bool eos = false);
+    std::vector<float> Encode(const std::string &s, bool bos = false, bool eos = false);
 
     std::string Decode(const Data& data);
 };
