@@ -7,7 +7,6 @@ class Tokenizer:
     def __init__(self, tokenizer):
         self.sp_model = SentencePieceProcessor(tokenizer.vocab_file)
 
-        # BOS / EOS token IDs
         self.n_words: int = self.sp_model.vocab_size()
         self.bos_id: int = self.sp_model.bos_id()
         self.eos_id: int = self.sp_model.eos_id()

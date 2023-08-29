@@ -2,7 +2,7 @@
 
 #include <memory>
 #include "cmath"
-#include <iostream>
+#include <queue>
 
 #include "utils.h"
 #include "data.h"
@@ -10,20 +10,58 @@
 #include "xllm.h"
 
 namespace xllm {
+
+    struct LastTokensUnit {
+        int tot = 0;
+        std::multiset <int> tokenSet;
+        std::queue <int> tokenQueue;
+
+        LastTokensUnit () {}
+
+        LastTokensUnit (int tot) {
+            Init(tot);
+        }
+
+        void Init(int tot) {
+            this->tot = tot;
+            tokenSet.clear();
+            while (tokenQueue.size() > 0) {
+                tokenQueue.pop();
+            }
+        }
+
+        void Push(int id) {
+            if (tokenQueue.size() == tot) {
+                tokenSet.erase(tokenSet.find(tokenQueue.front()));
+                tokenQueue.pop();
+            }
+            tokenQueue.push(id);
+            tokenSet.insert(id);
+        }
+    };
+
+
+    struct LastTokensManager {
+        std::vector <LastTokensUnit> units;
+
+        LastTokensManager () {}
+
+        LastTokensManager (int batch, int lastN) {
+            units.resize(batch);
+            for (int i = 0; i < batch; i++) {
+                units[i].Init(lastN);
+            }
+        }
+    };
+
     class LlamaModel {
     public:
-        std::string pre_prompt; // 系统设定
+        std::string pre_prompt= ""; // 系统设定
         const std::string B_INST{"[INST] "}, E_INST{" [/INST]"}, EOS{""};
 
-        int bos_token_id;
-        int eos_token_id;
-        int embed_dim = 4096;
-        int num_attention_heads = 32;
-        int head_dim = embed_dim / num_attention_heads;
-        const int max_positions = 32768;
-        int rotary_dim = 64;
-        const float scale_attn = sqrt(head_dim);
-        int block_cnt = 28;
+        ModelArgs params;
+
+        const float scale_attn = sqrt(params.head_dim);
 
         std::vector<std::vector<float> > sin, cos;
         Data sinData, cosData;
@@ -42,12 +80,10 @@ namespace xllm {
 
         // 推理
         int Forward(
-                const Data &inputIds,
-                const Data &attentionMask,
-                const Data &positionIds,
+                const Data &inputIds, const Data &attentionMask, const Data &positionIds,
                 std::vector <std::pair <Data, Data> > &pastKeyValues,
-                const GenerationConfig &generationConfig = GenerationConfig(),
-                const LastTokensManager &lastTokens = LastTokensManager());
+                const GenerationConfig &generationConfig,
+                const LastTokensManager &lastTokens, std::vector <float> *logits = nullptr);
 
         std::string Response(const std::vector<float>& input,
                                      RuntimeResult retCb,

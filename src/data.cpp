@@ -18,6 +18,11 @@ namespace xllm{
         }
     }
 
+    Data::Data(DataType type) {
+        dataType = type;
+        UpdateUnitSize();
+    }
+
     Data::Data(DataType type, const std::vector<int> &dims) {
         dataType = type;
         UpdateUnitSize();

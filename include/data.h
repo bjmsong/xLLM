@@ -35,6 +35,7 @@ class Data {
         uint8_t *cpuData = nullptr; // 数据指针
 
         Data() {};
+        Data (DataType type);
         Data (DataType type, const std::vector <int> &dims); // 构造函数
         // data中是原始数据，如果type不是float那么需要量化
         Data (DataType type, const std::vector <int> &dims, const std::vector <float> &data);
