@@ -2,8 +2,6 @@
 #include <string>
 #include <set>
 #include <unordered_map>
-#include <map>
-#include <cmath>
 
 #include "data.h"
 

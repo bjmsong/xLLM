@@ -1,3 +1,11 @@
+基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，继承了原项目**的能力。在此基础上，新增了以下特性：
+- 支持llama2
+- 支持BPE
+- 修改了prompt
+- 代码量少
+
+欢迎star！
+
 1. 导出模型
 
 ```bash

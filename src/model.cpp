@@ -126,7 +126,6 @@ namespace xllm {
                             std::vector<std::pair<Data, Data>> &pastKeyValues,
                             const GenerationConfig &generationConfig, const LastTokensManager &lastTokens,
                             std::vector <float> *retLogits) {
-        Data attenInput;
         Data q, k, v, qkv;
         Data attenWeights, attenOutput;
         Data attenLastOutput;
@@ -134,15 +133,15 @@ namespace xllm {
 
         Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
         Embedding(inputIds, weight["embed_tokens.weight"], hiddenStates);
-        for (int i = 0; i < block_cnt; i++) {
-            ApplyDeviceMap(this->deviceMap, i + 1, block_cnt);
-            RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
-                    1e-6, attenInput);
-            std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
-            std::string kWeightName = "model.layers." + std::to_string(i) + ".self_attn.k_proj.weight";
-            std::string vWeightName = "model.layers." + std::to_string(i) + ".self_attn.v_proj.weight";
-            std::string qkvWeightName = "model.layers." + std::to_string(i) + ".self_attn.W_pack.weight";
-            std::string oWeightName = "model.layers." + std::to_string(i) + ".self_attn.o_proj.weight";
+        for (int i = 0; i < params.block_cnt; i++) {
+            Data attenInput(DataType::FLOAT32, hiddenStates.dims);
+            RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".input_layernorm.weight"],
+                    attenInput, 1e-6);
+            std::string qWeightName = "layers." + std::to_string(i) + ".self_attn.q_proj.weight";
+            std::string kWeightName = "layers." + std::to_string(i) + ".self_attn.k_proj.weight";
+            std::string vWeightName = "layers." + std::to_string(i) + ".self_attn.v_proj.weight";
+            std::string qkvWeightName = "layers." + std::to_string(i) + ".self_attn.W_pack.weight";
+            std::string oWeightName = "layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
             int bsz = attenInput.dims[0], seqlen = attenInput.dims[1];
