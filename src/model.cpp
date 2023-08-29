@@ -1,4 +1,5 @@
 #include "model.h"
+#include "data.h"
 
 namespace xllm {
 
@@ -125,14 +126,14 @@ namespace xllm {
                             std::vector<std::pair<Data, Data>> &pastKeyValues,
                             const GenerationConfig &generationConfig, const LastTokensManager &lastTokens,
                             std::vector <float> *retLogits) {
-        Data hiddenStates;
         Data attenInput;
         Data q, k, v, qkv;
         Data attenWeights, attenOutput;
         Data attenLastOutput;
         Data w1, w2, w3;
 
-        Embedding(inputIds, this->weight["model.embed_tokens.weight"], hiddenStates);
+        Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
+        Embedding(inputIds, weight["embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < block_cnt; i++) {
             ApplyDeviceMap(this->deviceMap, i + 1, block_cnt);
             RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],

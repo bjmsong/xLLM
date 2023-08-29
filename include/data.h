@@ -33,6 +33,7 @@ class Data {
         std::vector <uint64_t> strides;
 
         uint8_t *cpuData = nullptr; // 数据指针
+        int assignBytes = 0;     // 已经分配的空间
 
         Data() {};
         Data (DataType type);
@@ -42,9 +43,7 @@ class Data {
 
         ~Data(); 
 
-        Data (const Data &ori); // 深拷贝
-
-        void CopyFrom(const Data &ori); // 复制
+        // Data (const Data &ori); // 深拷贝
 
         void Allocate(); // 分配内存
 

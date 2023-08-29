@@ -29,4 +29,6 @@ make -j4
 ```bash
 cmake .. -DDEVELOPMENT=ON
 make -j4
+
+./test/unittest --gtest_filter=test_operator.*
 ```

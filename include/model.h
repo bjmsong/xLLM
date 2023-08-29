@@ -1,13 +1,15 @@
 #pragma once
 
 #include <memory>
-#include "cmath"
 #include <queue>
+#include <thread>
+#include <mutex>
 
 #include "utils.h"
 #include "data.h"
 #include "param.h"
 #include "xllm.h"
+#include "operator.h"
 
 namespace xllm {
 
@@ -56,18 +58,16 @@ namespace xllm {
 
     class LlamaModel {
     public:
+        Tokenizer tokenizer;
+        WeightMap weight;
+
         std::string pre_prompt= ""; // 系统设定
         const std::string B_INST{"[INST] "}, E_INST{" [/INST]"}, EOS{""};
 
         ModelArgs params;
 
-        const float scale_attn = sqrt(params.head_dim);
-
         std::vector<std::vector<float> > sin, cos;
         Data sinData, cosData;
-
-        Tokenizer tokenizer;
-        WeightMap weight;
 
         ResponseContextDict responseContextDict;
 

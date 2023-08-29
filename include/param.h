@@ -3,6 +3,7 @@
 #include <set>
 #include <unordered_map>
 #include <map>
+#include <cmath>
 
 #include "data.h"
 
@@ -44,5 +45,6 @@ namespace xllm {
         int head_dim = embed_dim / num_attention_heads;
         int vocab_size = 32000;
         int rotary_dim = 128;  // 官方代码中没有找到
+        const float scale_attn = sqrt(head_dim);
     };
 }
