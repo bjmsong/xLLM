@@ -1,3 +1,5 @@
+## 介绍
+
 基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
 - 支持llama2-7B
 - 支持CPU加速
@@ -7,8 +9,8 @@
 - 支持Linux
 - 代码量<3k行，代码结构简单
 
-推理速度
-|      |   硬件   |   tokens/s   |
+
+|      |   硬件   |   推理速度(tokens/s)   |
 | ---- | ---- | ---- |
 |  FP16   |   4090   |      |
 |  FP16   |    Tesla T4  |      |
@@ -19,6 +21,7 @@
 
 欢迎star！
 
+## 快速开始
 1. 导出模型
 
 ```bash
@@ -47,7 +50,10 @@ make -j4
 
 5. 量化
 
-10. 开启单元测试
+
+## 开发者模式
+
+开启单元测试
 ```bash
 cmake .. -DDEVELOPMENT=ON
 make -j4

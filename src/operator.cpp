@@ -237,18 +237,18 @@ namespace xllm{
         printf("n = %d, m = %d, k = %d, spend %f s, gops = %f\n", n, m, k, spend, gops);
     }
 
-    void LlamaRotatePosition2D(const Data &input, const Data &positionIds, Data &sinData, Data &cosData, int rotaryDim) {
+    void LlamaRotatePosition2D(Data &input, const Data &positionIds, Data &sinData, Data &cosData, int rotaryDim) {
 
         int bsz = input.dims[0], seqlen = input.dims[1];
-        int spatial = data.Count(2);
-        int n = data.dims[2], m = data.dims[3];
+        int spatial = input.Count(2);
+        int n = input.dims[2], m = input.dims[3];
         int stride = (int)sinData.dims[1];
         for (int b = 0; b < bsz; b++) {
             for (int l = 0; l < seqlen; l++) {
                 int index = (int) ((float *) positionIds.cpuData)[b * positionIds.dims.back() + l];
                 float *sin = ((float *) sinData.cpuData) + stride * index;
                 float *cos = ((float *) cosData.cpuData) + stride * index;
-                float *d = (float *) data.cpuData + (b * seqlen + l) * spatial;
+                float *d = (float *) input.cpuData + (b * seqlen + l) * spatial;
                 for (int i = 0; i < n; i++) {
                     for (int j = 0; j < rotaryDim && j < m / 2; j++) {
                         float a = d[j], b = d[j + m / 2];
@@ -260,6 +260,144 @@ namespace xllm{
                 }
             }
         }
+    }
+
+    void Permute(const fastllm::DataDict &datas, const fastllm::FloatDict &floatParams, const fastllm::IntDict &intParams) {
+        Data &input = *(datas.find("input")->second);
+        Data &output = *(datas.find("output")->second);
+        Data &axisData = *(datas.find("axis")->second);
+        std::vector <int> axis;
+        for (int i = 0; i < axisData.Count(0); i++) {
+            axis.push_back(((int32_t *) axisData.cpuData)[i]);
+        }
+
+        output.Allocate();
+        uint8_t *tmpData = (uint8_t *) output.cpuData;
+        uint8_t *curData = (uint8_t *) input.cpuData;
+
+        if (axis == std::vector <int> {1, 2, 0} && input.dataType == DataType::FLOAT32) {
+            int n = input.dims[0];
+            int m = input.Count(1);
+
+            int threadNum = 1;
+            int per = m / threadNum;
+            int cur = 0;
+            auto pool = GetPool();
+            std::vector <std::future <void> > futures;
+            for (int i = 0; i < threadNum - 1; i++) {
+                int end = cur + per + (cur + per * (threadNum - i) < m);
+                futures.push_back(pool->Submit(Transpose, ((float*)tmpData) + cur * n, ((float*)curData) + cur, n, m, n, end - cur));
+                cur = end;
+            }
+            Transpose(((float*)tmpData) + cur * n, ((float*)curData) + cur, n, m, n, m - cur);
+            for (int i = 0; i < futures.size(); i++) {
+                futures[i].get();
+            }
+        } else if (axis == std::vector <int> {1, 0, 2}) {
+            int n = input.dims[0];
+            int m = input.dims[1];
+            int k = input.dims[2];
+            int unitSize = input.unitSize;
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < m; j++) {
+                    memcpy(tmpData + (j * n + i) * k * unitSize, curData + (i * m + j) * k * unitSize, k * unitSize);
+                }
+            }
+        } else if (axis == std::vector <int> {2, 0, 1, 3}) {
+            int n = input.dims[0] * input.dims[1];
+            int m = input.dims[2];
+            int k = input.dims[3];
+            int unitSize = input.unitSize;
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < m; j++) {
+                    memcpy(tmpData + (j * n + i) * k * unitSize, curData + (i * m + j) * k * unitSize, k * unitSize);
+                }
+            }
+        } else if (axis == std::vector<int> {0, 2, 1, 3}) {
+            int b = input.dims[0];
+            int n = input.dims[1];
+            int m = input.dims[2];
+            int k = input.dims[3];
+            int unitSize = input.unitSize;
+            for (int o = 0; o < b; o++) {
+                for (int i = 0; i < n; i++) {
+                    for (int j = 0; j < m; j++) {
+                        memcpy(tmpData + (j * n + i) * k * unitSize, curData + (i * m + j) * k * unitSize, k * unitSize);
+                    }
+                }
+                tmpData += output.Count(1) * unitSize;
+                curData += input.Count(1) * unitSize;
+            }
+        } else {
+            std::vector<int> oldSteps;
+            std::vector<int> newSteps;
+            int count = input.Count(0);
+            auto oldPos = new int[count];
+            for (int i = 0; i < axis.size(); i++) {
+                oldSteps.push_back(input.Count(i + 1));
+                newSteps.push_back(output.Count(i + 1));
+            }
+
+            for (int i = 0; i < count; ++i) {
+                int old = 0;
+                int idx = i;
+                for (int j = 0; j < axis.size(); ++j) {
+                    int order = axis[j];
+                    old += (idx / newSteps[j]) * oldSteps[order];
+                    idx %= newSteps[j];
+                }
+                oldPos[i] = old;
+            }
+
+            if (input.unitSize == 4) {
+                for (int i = 0; i < count; ++i) {
+                    ((float*)tmpData)[i] = ((float*)curData)[oldPos[i]];
+                }
+            } else if (input.unitSize == 2) {
+                for (int i = 0; i < count; ++i) {
+                    ((uint16_t*)tmpData)[i] = ((uint16_t*)curData)[oldPos[i]];
+                }
+            } else if (input.unitSize == 1) {
+                for (int i = 0; i < count; ++i) {
+                    ((uint8_t*)tmpData)[i] = ((uint8_t*)curData)[oldPos[i]];
+                }
+            }
+
+            delete[] oldPos;
+        }
+    }
+
+    void PermuteSelf(const fastllm::DataDict &datas, const fastllm::FloatDict &floatParams, const fastllm::IntDict &intParams) {
+        Data &input = *(datas.find("input")->second);
+        Data &axisData = *(datas.find("axis")->second);
+        std::vector <int> axis;
+        for (int i = 0; i < axisData.Count(0); i++) {
+            axis.push_back(((int32_t *) axisData.cpuData)[i]);
+        }
+
+        AssertInXLLM(input.dataType == DataType::FLOAT32 ||
+                        input.dataType == DataType::FLOAT16, "Permute error: datatype should be float32 or float16.");
+        AssertInXLLM(axis.size() == input.dims.size(), "Permute error: axis's size should be equal to data's shape's size.");
+
+        bool same = false;
+        same |= ((axis == std::vector <int>{1, 2, 0} || axis == std::vector <int>{1, 0, 2}) && (input.dims[0] == 1 || input.dims[1] == 1));
+        same |= ((axis == std::vector <int>{2, 0, 1, 3}) && input.dims[2] == 1);
+        same |= ((axis == std::vector <int>{0, 2, 1, 3}) && (input.dims[1] == 1 || input.dims[2] == 1));
+        if (same) {
+            std::vector<int> new_dims;
+            for (int i = 0; i < axis.size(); i++) {
+                new_dims.push_back(input.dims[axis[i]]);
+            }
+            input.Resize(new_dims);
+            return;
+        }
+
+        auto tmp = new Data();
+        Permute(input, axis, *tmp);
+
+        memcpy(input.cpuData, tmp->cpuData, input.unitSize * input.Count(0));
+        input.Resize(tmp->dims);
+        delete tmp;
     }
 
 }

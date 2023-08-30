@@ -48,10 +48,9 @@ class Data {
         ~Data(); 
 
         Data (const Data &ori); // 深拷贝
-
+        void CopyFrom(const Data &ori); // 复制
+        
         void Allocate(); // 分配内存
-
-        void Expansion(const std::vector <int> &dims); // 预扩容到相应尺寸
 
         void MallocSpace(); // 在设备上分配
 
@@ -63,6 +62,8 @@ class Data {
 
         void Reshape(const std::vector <int> &dims); // 更改尺寸,但不修改数据
 
+        uint64_t Count(int i) const;
+        
         void PrintShape() const; // 输出形状
 
         void Print() const; // 输出

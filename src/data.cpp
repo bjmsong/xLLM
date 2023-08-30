@@ -70,6 +70,10 @@ namespace xllm{
     }
 
     Data::Data(const Data &ori) {
+        CopyFrom(ori);
+    }
+
+    void Data::CopyFrom(const Data &ori) {
         if (ori.dims != this->dims || this->cpuData == nullptr) {
             if (ori.dims.size() == 0) {
                 delete[] this->cpuData;
@@ -81,6 +85,10 @@ namespace xllm{
             }
             this->dataType = ori.dataType;
             this->Resize(ori.dims);
+            for (int num : dims) {
+                counts *= num;
+            }
+            bytes = (counts * unitSize - 1) / unitSizeDiv + 1;
             this->Allocate();
         }
         std::memcpy(this->cpuData, ori.cpuData, bytes);
@@ -110,5 +118,15 @@ namespace xllm{
             outputDims[negative_index] = counts / new_counts;
         }
         Resize(outputDims);
+    }
+
+    uint64_t Data::Count(int i)  const{
+        if (i >= this->dims.size()) {
+            return 1;
+        }
+        if (i - 1 >= 0 && i - 1 < this->strides.size()) {
+            return this->strides[i - 1];
+        }
+        return this->dims[i] * this->strides[i];
     }
 }

@@ -27,8 +27,8 @@ namespace xllm {
                 fcos.push_back(cos[i][j]);
             }
         }
-        sinData = Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin);
-        cosData = Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos);
+        sinData.CopyFrom(Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin));
+        cosData.CopyFrom(Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos));
         
         WarmUp();
     }
@@ -143,7 +143,8 @@ namespace xllm {
                             std::vector <float> *retLogits) {
 
         Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
-        Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims), qkv;
+        Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
+        Data qkv;
         Data attenWeights, attenOutput;
         Data attenLastOutput;
         Data w1, w2, w3;
@@ -167,7 +168,6 @@ namespace xllm {
             std::vector <int> qkvSize = {bsz, seqlen, params.num_attention_heads, -1};
             q.Reshape(qkvSize);
             k.Reshape(qkvSize);
-            v.Reshape(qkvSize);
 
             LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
             LlamaRotatePosition2D(k, positionIds, sinData, cosData, params.rotary_dim);
@@ -210,7 +210,7 @@ namespace xllm {
 
             // 1.2 Attention
             // 1.2.0 q * k^T
-            MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(head_dim));
+            MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
             if (attentionMask.dims.size() != 0) {
                 AttentionMask(attenWeights, attentionMask, -10000);
@@ -226,16 +226,16 @@ namespace xllm {
             Linear(attenOutput, weight[oWeightName], Data(), attenLastOutput);
             AddTo(hiddenStates, attenLastOutput);
             // 2. mlp
-            RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".post_attention_layernorm.weight"], 1e-6, attenInput);
-            Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.gate_proj.weight"], Data(), w1);
-            Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.up_proj.weight"], Data(), w3);
+            RMSNorm(hiddenStates, this->weight["layers." + std::to_string(i) + ".post_attention_layernorm.weight"], 1e-6, attenInput);
+            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.gate_proj.weight"], Data(), w1);
+            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.up_proj.weight"], Data(), w3);
             Silu(w1, w1);
             MulTo(w1, w3);
-            Linear(w1, weight["model.layers." + std::to_string(i) + ".mlp.down_proj.weight"], Data(), w2);
+            Linear(w1, weight["layers." + std::to_string(i) + ".mlp.down_proj.weight"], Data(), w2);
             AddTo(hiddenStates, w2);
         }
 
-        RMSNorm(hiddenStates, weight["model.norm.weight"], 1e-6, hiddenStates);
+        RMSNorm(hiddenStates, weight["norm.weight"], 1e-6, hiddenStates);
         Data logits;
         Linear(hiddenStates, weight["lm_head.weight"], Data(), logits);
         logits.ToDevice(DataDevice::CPU);

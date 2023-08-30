@@ -24,4 +24,43 @@ TEST(test_opeartor, test_opeartor1) {
     Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
     Linear(attenInput, weight[qWeightName], q);
 
+    ModelArgs params;
+    int bsz = 1, seqlen = attenInput.dims[0];
+    std::vector <int> qkvSize = {bsz, seqlen, params.num_attention_heads, -1};
+    q.Reshape(qkvSize);
+
+    std::vector<std::vector<float> > sin, cos;
+    sin.resize(params.max_positions);
+    cos.resize(params.max_positions);
+    std::vector <float> invFreq;
+    for (int i = 0; i < params.rotary_dim; i += 2) {
+        invFreq.push_back(1.0 / pow(10000, (float)i / params.rotary_dim));
+    }
+    for (int i = 0; i < params.max_positions; i++) {
+        sin[i].resize(params.rotary_dim);
+        cos[i].resize(params.rotary_dim);
+        for (int j = 0; j < invFreq.size(); j++) {
+            sin[i][j] = ::sin((float)i * invFreq[j]);
+            cos[i][j] = ::cos((float)i * invFreq[j]);
+        }
+    }
+    std::vector <float> fsin, fcos;
+    for (int i = 0; i < sin.size(); i++) {
+        for (int j = 0; j < sin[0].size(); j++) {
+            fsin.push_back(sin[i][j]);
+            fcos.push_back(cos[i][j]);
+        }
+    }
+    Data sinData, cosData;
+    sinData.CopyFrom(Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin));
+    cosData.CopyFrom(Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos));
+
+    std::vector <float> vpids = std::vector <float> (seqlen, 0);
+    for (int i = 0; i < seqlen; i++) {
+        vpids[i] = i;
+    }
+    Data positionIds = Data(DataType::FLOAT32, {1, seqlen}, vpids);
+
+    LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
+
 }
