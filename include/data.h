@@ -5,8 +5,10 @@
 #include <cstring>
 #include <iostream>
 #include <cmath>
+
 #include "file.h"
 #include "utils.h"
+#include "xllm.h"
 
 namespace xllm{
 

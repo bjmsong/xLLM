@@ -1,5 +1,4 @@
 #include "xllm.h"
-#include "threadpool.h"
 
 namespace xllm {
     static int threads = 4;
@@ -21,6 +20,14 @@ namespace xllm {
         threads = t;
         if (xllmThreadPool) delete xllmThreadPool;
         xllmThreadPool = new ThreadPool(t);
+    }
+
+    int GetThreads() {
+        return threads;
+    }
+
+    ThreadPool *GetPool() {
+        return xllmThreadPool;
     }
 
 }

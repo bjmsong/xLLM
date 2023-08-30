@@ -1,8 +1,11 @@
-基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，继承了原项目**的能力。在此基础上，新增了以下特性：
-- 支持llama2
+基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
+- 支持llama2-7B
+- 支持Linux
+- 支持CPU加速
+- 支持INT8量化
 - 支持BPE
-- 修改了prompt
-- 代码量少
+- 无第三方依赖
+- 代码量少于2k行，代码结构简单
 
 欢迎star！
 
@@ -32,6 +35,7 @@ make -j4
 ```
 
 
+5. 量化
 
 10. 开启单元测试
 ```bash

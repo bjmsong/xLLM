@@ -126,12 +126,13 @@ namespace xllm {
                             std::vector<std::pair<Data, Data>> &pastKeyValues,
                             const GenerationConfig &generationConfig, const LastTokensManager &lastTokens,
                             std::vector <float> *retLogits) {
-        Data q, k, v, qkv;
+
+        Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
+        Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims), qkv;
         Data attenWeights, attenOutput;
         Data attenLastOutput;
         Data w1, w2, w3;
 
-        Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
         Embedding(inputIds, weight["embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < params.block_cnt; i++) {
             Data attenInput(DataType::FLOAT32, hiddenStates.dims);
@@ -140,32 +141,21 @@ namespace xllm {
             std::string qWeightName = "layers." + std::to_string(i) + ".self_attn.q_proj.weight";
             std::string kWeightName = "layers." + std::to_string(i) + ".self_attn.k_proj.weight";
             std::string vWeightName = "layers." + std::to_string(i) + ".self_attn.v_proj.weight";
-            std::string qkvWeightName = "layers." + std::to_string(i) + ".self_attn.W_pack.weight";
             std::string oWeightName = "layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
-            int bsz = attenInput.dims[0], seqlen = attenInput.dims[1];
-            if (weight.weight.find(qkvWeightName) != weight.weight.end()) {
-                Linear(attenInput, weight[qkvWeightName], Data(), qkv);
-                int per = qkv.dims.back() / 3;
-                Split(qkv, -1, 0, per, q);
-                Split(qkv, -1, per, per * 2, k);
-                Split(qkv, -1, per * 2, per * 3, v);
-            } else {
-                Linear(attenInput, weight[qWeightName], Data(), q);
-                Linear(attenInput, weight[kWeightName], Data(), k);
-                Linear(attenInput, weight[vWeightName], Data(), v);
-            }
+            int bsz = 1, seqlen = attenInput.dims[0];
+            Linear(attenInput, weight[qWeightName], q);
+            Linear(attenInput, weight[kWeightName], k);
+            Linear(attenInput, weight[vWeightName], v);
 
             std::vector <int> qkvSize = {bsz, seqlen, num_attention_heads, -1};
             q.Reshape(qkvSize);
             k.Reshape(qkvSize);
             v.Reshape(qkvSize);
 
-            if (alibiData.dims.size() == 0) {
-                fastllm::LlamaRotatePosition2D(q, positionIds, sinData, cosData, rotary_dim);
-                fastllm::LlamaRotatePosition2D(k, positionIds, sinData, cosData, rotary_dim);
-            }
+            LlamaRotatePosition2D(q, positionIds, sinData, cosData, rotary_dim);
+            LlamaRotatePosition2D(k, positionIds, sinData, cosData, rotary_dim);
 
             qkvSize = {bsz * seqlen, num_attention_heads, -1};
             q.Reshape(qkvSize);

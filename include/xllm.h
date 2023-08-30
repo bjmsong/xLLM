@@ -4,11 +4,14 @@
 #include <iostream>
 #include <vector>
 #include <math.h>
+#include "threadpool.h"
 
 namespace xllm {
     void PrintInstructionInfo();
     void SetThreads(int t);
-    
+    int GetThreads();
+    ThreadPool *GetPool();
+
     struct GenerationConfig {
         int output_token_limit = -1; // 最多输出多少, <= 0代表无限制
         int last_n = 64; // 末尾last_n个token计入重复惩罚

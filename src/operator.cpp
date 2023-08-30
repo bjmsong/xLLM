@@ -3,7 +3,6 @@
 namespace xllm{
     void Embedding(const Data &input, Data &weight, Data &output) {
         output.Allocate();
-
         int vocabSize = weight.dims[0], embSize = weight.dims[1];
         float *inputData = (float*)input.cpuData;
         if (weight.dataType == DataType::FLOAT32) {
@@ -18,7 +17,6 @@ namespace xllm{
 
     void RMSNorm(const Data &input, Data &weight, Data &output, float eps) {
         output.Allocate();
-
         int inner = input.dims.back();
         int outer = input.counts / inner;
 
@@ -70,11 +68,89 @@ namespace xllm{
         }
     }
 
-    void Linear(const Data &input, Data &weight, Data &output, const FloatDict &floatParams, const IntDict &intParams) {
-auto st = std::chrono::system_clock::now();
-        Data &bias = *(datas.find("bias")->second);
+    // inputData(n, m) * weightData(m, end-st) = outputData(n, end-st)
+    void FloatLinearPart(float *inputData, float *weightData, float *biasData, float *outputData,
+                            int n, int m, int k, int st, int end) {
+            for (int i = 0; i < n; i++) {
+                for (int j = st; j < end; j++) {
+                    float now = biasData ? biasData[j] : 0.0f;
+                    int l = 0;
+    #ifdef __AVX2__
+                    __m256 vsum = _mm256_setzero_ps();
+                    for (; l + 7 < m; l += 8) {
+                        __m256 vi = _mm256_loadu_ps(inputData + i * m + l);
+                        __m256 vw = _mm256_loadu_ps(weightData + j * m + l);
+                        vsum = _mm256_fmadd_ps(vi, vw, vsum);
+                    }
+                    now += Floatsum(vsum);
+    #endif
+                    for (; l < m; l++) {
+                        now += inputData[i * m + l] * weightData[j * m + l];
+                    }
+                    outputData[i * k + j] = now;
+                }
+            }
+        }
 
-        output.Allocate(0.0f);
+    struct FP16ToFP32Manager {
+        float dict[65536];
+
+        FP16ToFP32Manager() {
+            for (uint16_t i = 0; i < 65535; i++) {
+                dict[i] = half_to_float(i);
+            }
+        }
+    } fp16tofp32;
+
+    // inputData(float32) * weightData(float16) = outputData(float32)
+    void Float16LinearPart(float *inputData, uint16_t *weightData, float *biasData, float *outputData,
+                        int n, int m, int k, int st, int end) {
+        for (int i = 0; i < n; i++) {
+            for (int j = st; j < end; j++) {
+                float now = biasData ? biasData[j] : 0.0f;
+                int l = 0;
+#ifdef __AVX2__
+                __m256 vsum = _mm256_setzero_ps();
+                for (; l + 7 < m; l += 8) {
+                    __m256 vi = _mm256_loadu_ps(inputData + i * m + l);
+                    // _mm256_cvtph_ps: 将的16位半精度浮点数（__m128i类型）转换为256位单精度浮点数
+                    __m256 vw = _mm256_cvtph_ps(_mm_loadu_si128((__m128i *) (weightData + j * m + l)));
+                    vsum = _mm256_fmadd_ps(vi, vw, vsum);
+                }
+                now += Floatsum(vsum);
+#endif
+                for (; l < m; l++) {
+                    // float16*float32会有精度丢失，因此需要fp16tofp32
+                    now += inputData[i * m + l] * fp16tofp32.dict[weightData[j * m + l]];
+                }
+                outputData[i * k + j] = now;
+            }
+        }
+    }
+
+    // inputData(float16) * weightData(float16) = outputData(float16)
+    void Float16xFloat16LinearPart(uint16_t *inputData, uint16_t *weightData, float *biasData, uint16_t *outputData,
+                           int n, int m, int k, int st, int end) {
+        for (int i = 0; i < n; i++) {
+            for (int j = st; j < end; j++) {
+                float now = biasData ? biasData[j] : 0.0f;
+                int l = 0;
+                for (; l < m; l++) {
+                    // TODO: SIMD加速
+                    now += inputData[i * m + l] * fp16tofp32.dict[weightData[j * m + l]];
+                }
+                outputData[i * k + j] = float_to_half(now);
+            }
+        }
+    }
+
+
+    // input(n,m) * weight(m,k) = output(n,k)
+    void Linear(const Data &input, Data &weight, Data &output) {
+        output.Allocate();
+        auto st = std::chrono::system_clock::now();
+        Data bias;
+
         int n = input.counts / input.dims.back();
         int m = input.dims.back();
         int k = output.dims.back();
@@ -93,12 +169,12 @@ auto st = std::chrono::system_clock::now();
                 std::vector<std::future<void> > futures;
                 for (int i = 0; i < threadNum - 1; i++) {
                     int end = cur + per + (cur + per * (threadNum - i) < k);
-                    futures.push_back(pool->Submit(FloatLinearPart, inputData, weightData, biasData, outputData,
+                    futures.push_back(pool->enqueue(FloatLinearPart, inputData, weightData, biasData, outputData,
                                                    n, m, k, cur, end));
                     cur = end;
                 }
 
-                FloatLinearPart(inputData, weightData, biasData, outputData, n, m, k, cur, k);
+                FloatLinearPart(inputData, weightData, biasData, outputData, n, m, k, cur, k);  // 如果k不能被threadNum整除
                 for (int i = 0; i < futures.size(); i++) {
                     futures[i].get();
                 }
@@ -114,7 +190,7 @@ auto st = std::chrono::system_clock::now();
                 std::vector<std::future<void> > futures;
                 for (int i = 0; i < threadNum - 1; i++) {
                     int end = cur + per + (cur + per * (threadNum - i) < k);
-                    futures.push_back(pool->Submit(Float16LinearPart, inputData, weightData, biasData, outputData,
+                    futures.push_back(pool->enqueue(Float16LinearPart, inputData, weightData, biasData, outputData,
                                                    n, m, k, cur, end));
                     cur = end;
                 }
@@ -123,141 +199,6 @@ auto st = std::chrono::system_clock::now();
                 for (int i = 0; i < futures.size(); i++) {
                     futures[i].get();
                 }
-            } else if (weight.dataType == DataType::INT8) {
-                float *inputData = (float *) input.cpuData;
-                uint8_t *weightData = (uint8_t *) weight.cpuData;
-                float *outputData = (float *) output.cpuData;
-                float *biasData = bias.dims.size() > 0 ? (float *) bias.cpuData : nullptr;
-                weight.CalcWeightSum();
-
-                std::vector<LowBitConfig> inputConfigs;
-                for (int i = 0; i < n; i++) {
-                    float minValue = 1e9, maxValue = -1e9;
-                    for (int j = 0; j < m; j++) {
-                        minValue = std::min(minValue, inputData[i * m + j]);
-                        maxValue = std::max(maxValue, inputData[i * m + j]);
-                    }
-                    inputConfigs.push_back(LowBitConfig(minValue, maxValue, 8, 0));
-                }
-                std::vector<uint8_t> uinput;
-                uinput.resize(n * m);
-                for (int i = 0; i < n * m; i++) {
-#ifdef __AVX2__
-                    uinput[i] = inputConfigs[i / m].quantization(inputData[i]);
-                    uinput[i] = (uinput[i] + !uinput[i]) ^ 128;
-#else
-                    uinput[i] = inputConfigs[i / m].quantization(inputData[i]);
-#endif
-                }
-
-                MultiplyMultiThread(uinput.data(), weightData, (int32_t *) outputData, n, m, k, GetThreads());
-                for (int i = 0; i < n; i++) {
-                    uint32_t inputSum = 0;
-                    for (int j = 0; j < m; j++) {
-#ifdef __AVX2__
-                        inputSum += uinput[i * m + j] ^ 128;
-#else
-                        inputSum += uinput[i * m + j];
-#endif
-                    }
-
-                    for (int j = 0; j < k; j++) {
-                        int value = ((int32_t *) outputData)[i * k + j];
-#ifdef __AVX2__
-                        value += (128 * weight.weightSum[j]);
-                        value += (128 * inputSum);
-                        value -= m * 128 * 128;
-#endif
-                        value -= weight.weightSum[j] * inputConfigs[i].zeroPoint;
-                        value -= inputSum * weight.perChannelsConfigs[j].zeroPoint;
-                        value += (int) inputConfigs[i].zeroPoint * weight.perChannelsConfigs[j].zeroPoint * m;
-                        outputData[i * k + j] = weight.perChannelsConfigs[j].scale * inputConfigs[i].scale * value +
-                                                (biasData == nullptr ? 0.0 : biasData[j]);
-                    }
-                }
-
-                /*
-                这部分是float输入，float输出
-                int threadNum = threads;
-                int per = k / threadNum;
-                int cur = 0;
-                std::vector<std::thread *> threads;
-                for (int i = 0; i < threadNum - 1; i++) {
-                    int end = cur + per + (cur + per * (threadNum - i) < k);
-                    threads.push_back(new std::thread(&Int8LinearPart, inputData, weightData, biasData, outputData,
-                                                      weight.perChannelsConfigs.data(), n, m, k, cur, end));
-                    cur = end;
-                }
-                Int8LinearPart(inputData, weightData, biasData, outputData, weight.perChannelsConfigs.data(), n, m, k, cur, k);
-                for (int i = 0; i < threadNum - 1; i++) {
-                    threads[i]->join();
-                    delete threads[i];
-                }
-                */
-            } else if (weight.dataType == DataType::INT4 || weight.dataType == DataType::INT4_NOZERO) {
-                float *inputData = (float *) input.cpuData;
-                uint8_t *weightData = (uint8_t *) weight.cpuData;
-                float *outputData = (float *) output.cpuData;
-                float *biasData = bias.dims.size() > 0 ? (float *) bias.cpuData : nullptr;
-                weight.CalcWeightSum();
-
-                std::vector<LowBitConfig> inputConfigs;
-                for (int i = 0; i < n; i++) {
-                    float minValue = 1e9, maxValue = -1e9;
-                    for (int j = 0; j < m; j++) {
-                        minValue = std::min(minValue, inputData[i * m + j]);
-                        maxValue = std::max(maxValue, inputData[i * m + j]);
-                    }
-                    inputConfigs.push_back(LowBitConfig(minValue, maxValue, 8, 0));
-                }
-                std::vector<uint8_t> uinput;
-                uinput.resize(n * m);
-                for (int i = 0; i < n * m; i++) {
-                    uinput[i] = inputConfigs[i / m].quantization(inputData[i]);
-                }
-#ifdef __AVX__
-                uint8_t *temp = new uint8_t[32];
-                for (int i = 0; i < n; i++) {
-                    for (int j = 0; j + 31 < m; j += 32) {
-                        memcpy(temp, uinput.data() + i * m + j, 32);
-                        for (int k = 0; k < 16; k++) {
-                            uinput[i * m + j + k] = temp[k * 2 + 1];
-                            uinput[i * m + j + k + 16] = temp[k * 2];
-                        }
-                    }
-                }
-                delete[] temp;
-#endif
-                if (weight.dataType == DataType::INT4) {
-                    MultiplyInt4MultiThread(uinput.data(), weightData, (int32_t *) outputData, n, m, k,
-                                            weight.weightSum.data(), weight.zeros.data(), weight.scales.data(),
-                                            biasData,
-                                            inputConfigs, GetThreads());
-                } else {
-                    MultiplyInt4NoZeroMultiThread(uinput.data(), weightData, (int32_t *) outputData, n, m, k,
-                                                  weight.weightSum.data(), weight.mins.data(), weight.scales.data(),
-                                                  biasData,
-                                                  inputConfigs, GetThreads());
-                }
-
-/*
-            //这部分是float输入，float输出
-            int threadNum = GetThreads();
-            int per = k / threadNum;
-            int cur = 0;
-            std::vector<std::thread *> threads;
-            for (int i = 0; i < threadNum - 1; i++) {
-                int end = cur + per + (cur + per * (threadNum - i) < k);
-                threads.push_back(new std::thread(&Int4LinearPart, inputData, weightData, biasData, outputData,
-                                                  weight.perChannelsConfigs.data(), n, m, k, cur, end));
-                cur = end;
-            }
-            Int4LinearPart(inputData, weightData, biasData, outputData, weight.perChannelsConfigs.data(), n, m, k, cur, k);
-            for (int i = 0; i < threadNum - 1; i++) {
-                threads[i]->join();
-                delete threads[i];
-            }
-*/
             } else {
                 ErrorInXLLM("Linear error: unsupport weight's dataType.\n");
             }
@@ -274,7 +215,7 @@ auto st = std::chrono::system_clock::now();
                 std::vector<std::future<void> > futures;
                 for (int i = 0; i < threadNum - 1; i++) {
                     int end = cur + per + (cur + per * (threadNum - i) < k);
-                    futures.push_back(pool->Submit(Float16xFloat16LinearPart, inputData, weightData, biasData, outputData,
+                    futures.push_back(pool->enqueue(Float16xFloat16LinearPart, inputData, weightData, biasData, outputData,
                                                    n, m, k, cur, end));
                     cur = end;
                 }
@@ -287,10 +228,11 @@ auto st = std::chrono::system_clock::now();
                 ErrorInXLLM("Linear error: unsupport weight's dataType.\n");
             }
         } else {
-            ErrorInXLLM("Linear error: unsupport weight's dataType.\n");
+            ErrorInXLLM("Linear error: unsupport input's dataType.\n");
         }
-float spend = GetSpan(st, std::chrono::system_clock::now());
-float gops = (float)n * m * k / spend / 1e9;
-printf("n = %d, m = %d, k = %d, spend %f s, gops = %f\n", n, m, k, spend, gops);
+
+        float spend = GetSpan(st, std::chrono::system_clock::now());
+        float gops = (float)2* n * m * k / spend / 1e9;
+        printf("n = %d, m = %d, k = %d, spend %f s, gops = %f\n", n, m, k, spend, gops);
     }
 }
