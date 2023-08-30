@@ -262,12 +262,40 @@ namespace xllm{
         }
     }
 
-    void Permute(const fastllm::DataDict &datas, const fastllm::FloatDict &floatParams, const fastllm::IntDict &intParams) {
-        Data &input = *(datas.find("input")->second);
-        Data &output = *(datas.find("output")->second);
-        Data &axisData = *(datas.find("axis")->second);
+    void Transpose4x4(float *pDst, float *pSrc, int dstStride, int srcStride, int n, int m) {
+        if (n < 4 || m < 4) {
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < m; j++) {
+                    pDst[j * dstStride + i] = pSrc[i * srcStride + j];
+                }
+            }
+
+            return;
+        }
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < m; j++) {
+                pDst[j * dstStride + i] = pSrc[i * srcStride + j];
+            }
+        }
+    }
+
+    void Transpose(float *pDst, float *pSrc, int dstStride, int srcStride, int n, int m) {
+        int per = 4;
+        for (int i = 0; i < n; i += per) {
+            for (int j = 0; j < m; j += per) {
+                Transpose4x4(pDst + j * dstStride + i,
+                             pSrc + i * srcStride + j,
+                             dstStride, srcStride,
+                             std::min(per, n - i),
+                             std::min(per, m - j));
+            }
+        }
+    }
+
+    void Permute(Data &input, Data &output, Data &axisData) {
         std::vector <int> axis;
-        for (int i = 0; i < axisData.Count(0); i++) {
+        for (int i = 0; i < axisData.counts; i++) {
             axis.push_back(((int32_t *) axisData.cpuData)[i]);
         }
 
@@ -286,7 +314,7 @@ namespace xllm{
             std::vector <std::future <void> > futures;
             for (int i = 0; i < threadNum - 1; i++) {
                 int end = cur + per + (cur + per * (threadNum - i) < m);
-                futures.push_back(pool->Submit(Transpose, ((float*)tmpData) + cur * n, ((float*)curData) + cur, n, m, n, end - cur));
+                futures.push_back(pool->enqueue(Transpose, ((float*)tmpData) + cur * n, ((float*)curData) + cur, n, m, n, end - cur));
                 cur = end;
             }
             Transpose(((float*)tmpData) + cur * n, ((float*)curData) + cur, n, m, n, m - cur);
@@ -367,11 +395,9 @@ namespace xllm{
         }
     }
 
-    void PermuteSelf(const fastllm::DataDict &datas, const fastllm::FloatDict &floatParams, const fastllm::IntDict &intParams) {
-        Data &input = *(datas.find("input")->second);
-        Data &axisData = *(datas.find("axis")->second);
+    void PermuteSelf(Data &input, Data &axisData) {
         std::vector <int> axis;
-        for (int i = 0; i < axisData.Count(0); i++) {
+        for (int i = 0; i < axisData.counts; i++) {
             axis.push_back(((int32_t *) axisData.cpuData)[i]);
         }
 
@@ -380,6 +406,8 @@ namespace xllm{
         AssertInXLLM(axis.size() == input.dims.size(), "Permute error: axis's size should be equal to data's shape's size.");
 
         bool same = false;
+        // 下面几种情况不需要移动数据
+        // 例如: (1,2,3) -> (2,3,1) / (2,1,3)
         same |= ((axis == std::vector <int>{1, 2, 0} || axis == std::vector <int>{1, 0, 2}) && (input.dims[0] == 1 || input.dims[1] == 1));
         same |= ((axis == std::vector <int>{2, 0, 1, 3}) && input.dims[2] == 1);
         same |= ((axis == std::vector <int>{0, 2, 1, 3}) && (input.dims[1] == 1 || input.dims[2] == 1));
@@ -393,9 +421,9 @@ namespace xllm{
         }
 
         auto tmp = new Data();
-        Permute(input, axis, *tmp);
+        Permute(input, *tmp, axisData);
 
-        memcpy(input.cpuData, tmp->cpuData, input.unitSize * input.Count(0));
+        memcpy(input.cpuData, tmp->cpuData, input.unitSize * input.counts);
         input.Resize(tmp->dims);
         delete tmp;
     }

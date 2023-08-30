@@ -177,16 +177,17 @@ namespace xllm {
             k.Reshape(qkvSize);
             v.Reshape(qkvSize);
 
-            PermuteSelf(q, {1, 0, 2});
-            PermuteSelf(k, {1, 0, 2});
-            PermuteSelf(v, {1, 0, 2});
+            Data axisData = Data(DataType::FLOAT32, {1, 0, 2});
+            PermuteSelf(q, axisData);
+            PermuteSelf(k, axisData);
+            PermuteSelf(v, axisData);
 
             Data &pastKey = pastKeyValues[i].first, &pastValue = pastKeyValues[i].second;
-            int unitLen = 64;
+            int unitLen = 64;   // 每次扩容的seq_len是unitLen的倍数
             while ((pastKey.dims.size() == 0 && (pastKey.expansionDims.size() == 0 || k.dims[1] > pastKey.expansionDims[1]))
                    || (pastKey.dims.size() > 0 && pastKey.dims[1] + k.dims[1] > pastKey.expansionDims[1])) {
                 std::vector <int> newDims;
-                if (pastKey.Count(0) == 0 || pastKey.dims.size() == 0) {
+                if (pastKey.counts == 0 || pastKey.dims.size() == 0) {
                     newDims = std::vector <int> {k.dims[0], ((k.dims[1] - 1) / unitLen + 1) * unitLen, k.dims[2]};
                 } else {
                     newDims = pastKey.dims;
@@ -205,6 +206,7 @@ namespace xllm {
                 }
                 pastValue.Expansion(newDims);
             }
+
             CatDirect(pastKey, k, 1);
             CatDirect(pastValue, v, 1);
 

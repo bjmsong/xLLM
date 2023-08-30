@@ -19,7 +19,6 @@
 |  INT8    |   Tesla T4   |      |
 |  INT8    |   Intel Xeon   |      |
 
-欢迎star！
 
 ## 快速开始
 1. 导出模型
@@ -60,3 +59,5 @@ make -j4
 
 ./test/unittest --gtest_filter=test_operator.*
 ```
+
+欢迎star！

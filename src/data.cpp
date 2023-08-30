@@ -23,9 +23,7 @@ namespace xllm{
         UpdateUnitSize();
     }
 
-    Data::Data(DataType type, const std::vector<int> &dims) {
-        dataType = type;
-        UpdateUnitSize();
+    Data::Data(DataType type, const std::vector<int> &dims) : Data::Data(type) {
         for (int num : dims) {
             counts *= num;
         }
@@ -44,6 +42,7 @@ namespace xllm{
 
     Data::Data(DataType type, const std::vector<int> &dims, const std::vector<float> &data) : Data::Data(type, dims) {
         Allocate();
+        // 如果不是float32那么需要量化
         if (type == DataType::FLOAT32) {
             memcpy(cpuData, data.data(), bytes);
         }
@@ -52,17 +51,17 @@ namespace xllm{
     void Data::Allocate() {
         if(assignBytes<bytes){
             FreeSpace();
-            MallocSpace();
+            MallocSpace(bytes);
         }
-    }
-
-    void Data::MallocSpace() {
-        cpuData = new uint8_t[bytes];
-        assignBytes = bytes;
     }
 
     void Data::FreeSpace() {
         delete[] cpuData;
+    }
+
+    void Data::MallocSpace(int bytes) {
+        cpuData = new uint8_t[bytes];
+        assignBytes = bytes;
     }
 
     Data::~Data() {
@@ -88,7 +87,7 @@ namespace xllm{
             for (int num : dims) {
                 counts *= num;
             }
-            bytes = (counts * unitSize - 1) / unitSizeDiv + 1;
+            this->bytes = (counts * unitSize - 1) / unitSizeDiv + 1;
             this->Allocate();
         }
         std::memcpy(this->cpuData, ori.cpuData, bytes);
@@ -102,7 +101,7 @@ namespace xllm{
                 if (negative_index == -1) {
                     negative_index = i;
                 } else {
-                    // dims只能有一个负数索引
+                    // dims只能包含一个负数索引
                     ErrorInXLLM("Reshape error.\n");
                 }
             } else {
@@ -128,5 +127,52 @@ namespace xllm{
             return this->strides[i - 1];
         }
         return this->dims[i] * this->strides[i];
+    }
+
+    void Data::Expansion(const std::vector<int> &dims) {
+        if (this->dims.size() == 0) {
+            Resize(dims);
+            MallocSpace(strides[0] * dims[0]);
+            return;
+        }
+
+        AssertInXLLM(dims.size() == this->dims.size(), "Expansion error: real dims's size should equal to expansion dims's size.\n");
+        for (int i = 0; i < dims.size(); i++) {
+            AssertInXLLM(dims[i] == -1 || dims[i] >= this->dims[i], "Expansion error: real size should <= expansion size.\n");
+        }
+
+        int axis = -1;
+        for (int i = 0; i < this->dims.size(); i++) {
+            if (this->dims[i] < dims[i]) {
+                axis = i;
+                break;
+            }
+        }
+
+        uint64_t oldBytes = bytes;
+        int input1Stride = this->Count(axis);
+
+        this->strides.resize(dims.size(), 1);
+        this->strides.back() = 1;
+        for (int i = this->dims.size() - 2; i >= 0; i--) {
+            this->strides[i] = std::max(this->dims[i + 1], dims[i + 1]) * this->strides[i + 1];
+        }
+        this->expansionDims = dims;
+        if (this->assignBytes != 0) {
+            uint8_t *old = this->cpuData;
+            MallocSpace(this->strides[0] * std::max(this->dims[0], dims[0]));
+            int outer = this->Count(0) / this->Count(axis);
+            int input0Stride = this->Count(axis);
+            int inner = this->strides[axis];
+            int unitSize = this->unitSize;
+            for (int o = 0; o < outer; o++) {
+                memcpy(this->cpuData + o * input0Stride * unitSize,
+                        old + o * input1Stride * unitSize,
+                        this->dims[axis] * inner * unitSize);
+            }
+            delete[] old;
+        } else {
+            MallocSpace(this->strides[0] * std::max(this->dims[0], dims[0]));
+        }
     }
 }
