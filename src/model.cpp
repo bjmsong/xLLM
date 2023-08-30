@@ -115,9 +115,7 @@ namespace xllm {
                 break;
             }
             results.clear();
-
-            attentionMask.ToDevice(DataDevice::CPU);
-            positionIds.ToDevice(DataDevice::CPU);
+            
             inputIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)ret}));
             attentionMask = Data();
             positionIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)len}));
@@ -184,8 +182,8 @@ namespace xllm {
 
             Data &pastKey = pastKeyValues[i].first, &pastValue = pastKeyValues[i].second;
             int unitLen = 64;   // 每次扩容的seq_len是unitLen的倍数
-            while ((pastKey.dims.size() == 0 && (pastKey.expansionDims.size() == 0 || k.dims[1] > pastKey.expansionDims[1]))
-                   || (pastKey.dims.size() > 0 && pastKey.dims[1] + k.dims[1] > pastKey.expansionDims[1])) {
+            while ((pastKey.dims.size() == 0 && (pastKey.expandDims.size() == 0 || k.dims[1] > pastKey.expandDims[1]))
+                   || (pastKey.dims.size() > 0 && pastKey.dims[1] + k.dims[1] > pastKey.expandDims[1])) {
                 std::vector <int> newDims;
                 if (pastKey.counts == 0 || pastKey.dims.size() == 0) {
                     newDims = std::vector <int> {k.dims[0], ((k.dims[1] - 1) / unitLen + 1) * unitLen, k.dims[2]};
@@ -195,8 +193,8 @@ namespace xllm {
                 }
                 pastKey.Expansion(newDims);
             }
-            while ((pastValue.dims.size() == 0 && (pastValue.expansionDims.size() == 0 || v.dims[1] > pastValue.expansionDims[1]))
-                   || (pastValue.dims.size() > 0 && pastValue.dims[1] + v.dims[1] > pastValue.expansionDims[1])) {
+            while ((pastValue.dims.size() == 0 && (pastValue.expandDims.size() == 0 || v.dims[1] > pastValue.expandDims[1]))
+                   || (pastValue.dims.size() > 0 && pastValue.dims[1] + v.dims[1] > pastValue.expandDims[1])) {
                 std::vector <int> newDims;
                 if (pastValue.Count(0) == 0 || pastValue.dims.size() == 0) {
                     newDims = std::vector <int> {v.dims[0], ((v.dims[1] - 1) / unitLen + 1) * unitLen, v.dims[2]};
@@ -222,30 +220,28 @@ namespace xllm {
             MatMul(attenWeights, pastValue, attenOutput);
 
             attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
-            PermuteSelf(attenOutput, {1, 0, 2});
+            PermuteSelf(attenOutput, axisData);
             attenOutput.Reshape({bsz, seqlen, -1});
 
-            Linear(attenOutput, weight[oWeightName], Data(), attenLastOutput);
+            Linear(attenOutput, weight[oWeightName], attenLastOutput);
             AddTo(hiddenStates, attenLastOutput);
             // 2. mlp
-            RMSNorm(hiddenStates, this->weight["layers." + std::to_string(i) + ".post_attention_layernorm.weight"], 1e-6, attenInput);
-            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.gate_proj.weight"], Data(), w1);
-            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.up_proj.weight"], Data(), w3);
+            RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".post_attention_layernorm.weight"], attenInput, 1e-6);
+            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.gate_proj.weight"],  w1);
+            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.up_proj.weight"],  w3);
             Silu(w1, w1);
             MulTo(w1, w3);
-            Linear(w1, weight["layers." + std::to_string(i) + ".mlp.down_proj.weight"], Data(), w2);
+            Linear(w1, weight["layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
             AddTo(hiddenStates, w2);
         }
 
-        RMSNorm(hiddenStates, weight["norm.weight"], 1e-6, hiddenStates);
+        RMSNorm(hiddenStates, weight["norm.weight"], hiddenStates, 1e-6);
         Data logits;
-        Linear(hiddenStates, weight["lm_head.weight"], Data(), logits);
-        logits.ToDevice(DataDevice::CPU);
+        Linear(hiddenStates, weight["lm_head.weight"], logits);
 
         int lastRet = -1;
         if (generationConfig.output_logits && retLogits != nullptr) {
             int size = logits.dims.back();
-            logits.ToDevice(DataDevice::CPU);
             retLogits->resize(size);
             memcpy((float*)retLogits->data(), ((float*)logits.cpuData) + (logits.dims[1] - 1) * size, size * logits.unitSize);
         }

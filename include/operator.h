@@ -17,4 +17,6 @@ namespace xllm{
     void LlamaRotatePosition2D(Data &input, const Data &positionIds, Data &sinData, Data &cosData, int rotaryDim); // 2D position for llama
 
     void PermuteSelf(Data &input, Data &axisData);
+
+    void CatDirect(Data &input0, Data &input1, int axis);
 }

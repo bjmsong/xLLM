@@ -8,9 +8,9 @@ using namespace xllm;
 WeightMap weight{"/root/autodl-tmp/llama2_7b_chat.bin"};
 
 TEST(test_opeartor, test_opeartor1) {
-    Data input = Data(DataType::FLOAT32, {1, 5}, {1,2,3,4,5});
-    Data hiddenStates(DataType::FLOAT32, {input.dims[1], 4096});
-    Embedding(input, weight["embed_tokens.weight"], hiddenStates);
+    Data tokens = Data(DataType::FLOAT32, {1, 5}, {1,2,3,4,5});
+    Data hiddenStates(DataType::FLOAT32, {tokens.dims[1], 4096});
+    Embedding(tokens, weight["embed_tokens.weight"], hiddenStates);
     ASSERT_EQ(hiddenStates.counts, 5*4096);
     ASSERT_NE(((float *)hiddenStates.cpuData)[0], 0);
 

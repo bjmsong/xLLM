@@ -428,4 +428,65 @@ namespace xllm{
         delete tmp;
     }
 
+    void CatDirect(Data &input0, Data &input1, int axis) {
+
+        AssertInXLLM((input0.dataType == DataType::FLOAT32 && input1.dataType == DataType::FLOAT32) ||
+                        (input0.dataType == DataType::FLOAT16 && input1.dataType == DataType::FLOAT16),
+                        "CatDirect's input's type should be float32.\n");
+
+        // input0还没有数据
+        if (input0.dims.size() == 0) {
+            input0.counts = 1;
+            for (int num : input1.dims) {
+                input0.counts *= num;
+            }
+            input0.bytes = (input0.counts * input0.unitSize - 1) / input0.unitSizeDiv + 1;
+            input0.Resize(input1.dims);
+
+            AssertInXLLM(input0.expandDims.size() == input1.dims.size() &&
+                            input1.dims[axis] <= input0.expandDims[axis],
+                            "CatDirect Error: input0's expansion size is not enough.\n");
+
+            int outer = input1.counts / input1.Count(axis);
+            int input1Stride = input1.Count(axis);
+            int input0Stride = input1Stride/input1.dims[axis] * input0.expandDims[axis];
+            int unitSize = input0.unitSize;
+            for (int o = 0; o < outer; o++) {
+                memcpy(input0.cpuData + o * input0Stride * unitSize,
+                       input1.cpuData + o * input1Stride * unitSize,
+                       input1Stride * unitSize);
+            }
+
+            return;
+        }
+
+        // input0已有数据
+        AssertInXLLM(input0.dims.size() == input1.dims.size(), "Cat Error: input's shape's size should be same.\n");
+        int dimsLen = input0.dims.size();
+        axis = (axis % dimsLen + dimsLen) % dimsLen;
+
+        for (int i = 0; i < dimsLen; i++) {
+            if (i != axis) {
+                AssertInXLLM(input0.dims[i] == input1.dims[i], "Cat Error: input's shape doesn't match.");
+            }
+        }
+
+        std::vector <int> dims = input0.dims;
+        std::vector <int> oldDims = dims;
+        dims[axis] += input1.dims[axis];
+        input0.Resize(dims);
+        int outer = input0.Count(0) / input0.Count(axis);
+        int input0Stride = input0.Count(axis);
+        int input1Stride = input1.Count(axis);
+
+        int inner = input0.strides[axis];
+        int unitSize = input0.unitSize;
+
+        for (int o = 0; o < outer; o++) {
+            memcpy(input0.cpuData + o * input0Stride * unitSize + oldDims[axis] * inner * unitSize,
+                   input1.cpuData + (o * input1Stride) * unitSize,
+                   input1.dims[axis] * inner * unitSize);
+        }
+    }
+
 }

@@ -24,6 +24,7 @@ namespace xllm{
     }
 
     Data::Data(DataType type, const std::vector<int> &dims) : Data::Data(type) {
+        counts = 1;
         for (int num : dims) {
             counts *= num;
         }
@@ -59,8 +60,9 @@ namespace xllm{
         delete[] cpuData;
     }
 
-    void Data::MallocSpace(int bytes) {
+    void Data::MallocSpace(uint64_t bytes) {
         cpuData = new uint8_t[bytes];
+        
         assignBytes = bytes;
     }
 
@@ -84,6 +86,7 @@ namespace xllm{
             }
             this->dataType = ori.dataType;
             this->Resize(ori.dims);
+            counts = 1;
             for (int num : dims) {
                 counts *= num;
             }
@@ -130,9 +133,16 @@ namespace xllm{
     }
 
     void Data::Expansion(const std::vector<int> &dims) {
-        if (this->dims.size() == 0) {
-            Resize(dims);
-            MallocSpace(strides[0] * dims[0]);
+        
+        expandDims = dims;
+        expandCounts = 1;
+        for (int dim : dims) {
+            expandCounts *= dim;
+        }
+        expandBytes = (expandCounts * unitSize - 1) / unitSizeDiv + 1;
+
+        if (this->dims.size() == 0 || assignBytes == 0) {
+            this->MallocSpace(expandBytes);
             return;
         }
 
@@ -141,38 +151,26 @@ namespace xllm{
             AssertInXLLM(dims[i] == -1 || dims[i] >= this->dims[i], "Expansion error: real size should <= expansion size.\n");
         }
 
+        MallocSpace(expandBytes);
+
+        // 要扩张哪一个维度
         int axis = -1;
-        for (int i = 0; i < this->dims.size(); i++) {
+        for (int i = 0; i < dims.size(); i++) {
             if (this->dims[i] < dims[i]) {
                 axis = i;
                 break;
             }
         }
 
-        uint64_t oldBytes = bytes;
-        int input1Stride = this->Count(axis);
-
-        this->strides.resize(dims.size(), 1);
-        this->strides.back() = 1;
-        for (int i = this->dims.size() - 2; i >= 0; i--) {
-            this->strides[i] = std::max(this->dims[i + 1], dims[i + 1]) * this->strides[i + 1];
+        int inputStride = this->Count(axis);
+        uint8_t *old = this->cpuData;
+        // 把原来的数据拷贝到新的空间
+        int outer = this->counts / inputStride;
+        for (int o = 0; o < outer; o++) {
+            memcpy(this->cpuData + o * inputStride/this->dims[axis]*dims[axis] * unitSize,
+                    old + o * inputStride * unitSize,
+                    inputStride * unitSize);
         }
-        this->expansionDims = dims;
-        if (this->assignBytes != 0) {
-            uint8_t *old = this->cpuData;
-            MallocSpace(this->strides[0] * std::max(this->dims[0], dims[0]));
-            int outer = this->Count(0) / this->Count(axis);
-            int input0Stride = this->Count(axis);
-            int inner = this->strides[axis];
-            int unitSize = this->unitSize;
-            for (int o = 0; o < outer; o++) {
-                memcpy(this->cpuData + o * input0Stride * unitSize,
-                        old + o * input1Stride * unitSize,
-                        this->dims[axis] * inner * unitSize);
-            }
-            delete[] old;
-        } else {
-            MallocSpace(this->strides[0] * std::max(this->dims[0], dims[0]));
-        }
-    }
+        delete[] old;
+    }    
 }
