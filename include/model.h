@@ -82,8 +82,8 @@ namespace xllm {
         int Forward(
                 const Data &inputIds, const Data &attentionMask, const Data &positionIds,
                 std::vector <std::pair <Data, Data> > &pastKeyValues,
-                const GenerationConfig &generationConfig,
-                const LastTokensManager &lastTokens, std::vector <float> *logits = nullptr);
+                const GenerationConfig &generationConfig = GenerationConfig(),
+                const LastTokensManager &lastTokens = LastTokensManager(), std::vector <float> *logits = nullptr);
 
         std::string Response(const std::vector<float>& input,
                                      RuntimeResult retCb,

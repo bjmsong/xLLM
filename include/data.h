@@ -47,7 +47,7 @@ class Data {
 
         ~Data(); 
 
-        // Data (const Data &ori); // 深拷贝
+        Data (const Data &ori); // 深拷贝
 
         void Allocate(); // 分配内存
 

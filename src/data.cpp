@@ -69,22 +69,22 @@ namespace xllm{
         delete[] this->cpuData;
     }
 
-    // Data::Data(const Data &ori) {
-    //     if (ori.dims != this->dims || this->cpuData == nullptr) {
-    //         if (ori.dims.size() == 0) {
-    //             delete[] this->cpuData;
-    //             this->dataType = ori.dataType;
-    //             this->UpdateUnitSize();
-    //             this->dims.resize(0);
-    //             this->cpuData = nullptr;
-    //             return;
-    //         }
-    //         this->dataType = ori.dataType;
-    //         this->Resize(ori.dims);
-    //         this->Allocate();
-    //     }
-    //     std::memcpy(this->cpuData, ori.cpuData, bytes);
-    // }
+    Data::Data(const Data &ori) {
+        if (ori.dims != this->dims || this->cpuData == nullptr) {
+            if (ori.dims.size() == 0) {
+                delete[] this->cpuData;
+                this->dataType = ori.dataType;
+                this->UpdateUnitSize();
+                this->dims.resize(0);
+                this->cpuData = nullptr;
+                return;
+            }
+            this->dataType = ori.dataType;
+            this->Resize(ori.dims);
+            this->Allocate();
+        }
+        std::memcpy(this->cpuData, ori.cpuData, bytes);
+    }
 
     void Data::Reshape(const std::vector<int> &dims) {
         int negative_index = -1;

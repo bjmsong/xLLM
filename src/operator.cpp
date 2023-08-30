@@ -92,8 +92,9 @@ namespace xllm{
             }
         }
 
+    // uint16_t -> float32
     struct FP16ToFP32Manager {
-        float dict[65536];
+        float dict[65536];  // 2^16
 
         FP16ToFP32Manager() {
             for (uint16_t i = 0; i < 65535; i++) {
@@ -113,14 +114,13 @@ namespace xllm{
                 __m256 vsum = _mm256_setzero_ps();
                 for (; l + 7 < m; l += 8) {
                     __m256 vi = _mm256_loadu_ps(inputData + i * m + l);
-                    // _mm256_cvtph_ps: 将的16位半精度浮点数（__m128i类型）转换为256位单精度浮点数
+                    // _mm256_cvtph_ps: float16 -> float32 
                     __m256 vw = _mm256_cvtph_ps(_mm_loadu_si128((__m128i *) (weightData + j * m + l)));
                     vsum = _mm256_fmadd_ps(vi, vw, vsum);
                 }
                 now += Floatsum(vsum);
 #endif
                 for (; l < m; l++) {
-                    // float16*float32会有精度丢失，因此需要fp16tofp32
                     now += inputData[i * m + l] * fp16tofp32.dict[weightData[j * m + l]];
                 }
                 outputData[i * k + j] = now;
@@ -180,6 +180,7 @@ namespace xllm{
                 }
             } else if (weight.dataType == DataType::FLOAT16) {
                 float *inputData = (float *) input.cpuData;
+                // 大部分CPU不支持FP16类型，但是支持uint16_t
                 uint16_t *weightData = (uint16_t *) weight.cpuData;
                 float *outputData = (float *) output.cpuData;
                 float *biasData = bias.dims.size() > 0 ? (float *) bias.cpuData : nullptr;
@@ -235,4 +236,30 @@ namespace xllm{
         float gops = (float)2* n * m * k / spend / 1e9;
         printf("n = %d, m = %d, k = %d, spend %f s, gops = %f\n", n, m, k, spend, gops);
     }
+
+    void LlamaRotatePosition2D(const Data &input, const Data &positionIds, Data &sinData, Data &cosData, int rotaryDim) {
+
+        int bsz = input.dims[0], seqlen = input.dims[1];
+        int spatial = data.Count(2);
+        int n = data.dims[2], m = data.dims[3];
+        int stride = (int)sinData.dims[1];
+        for (int b = 0; b < bsz; b++) {
+            for (int l = 0; l < seqlen; l++) {
+                int index = (int) ((float *) positionIds.cpuData)[b * positionIds.dims.back() + l];
+                float *sin = ((float *) sinData.cpuData) + stride * index;
+                float *cos = ((float *) cosData.cpuData) + stride * index;
+                float *d = (float *) data.cpuData + (b * seqlen + l) * spatial;
+                for (int i = 0; i < n; i++) {
+                    for (int j = 0; j < rotaryDim && j < m / 2; j++) {
+                        float a = d[j], b = d[j + m / 2];
+                        d[j] = a * cos[j] - b * sin[j];
+                        d[j + m / 2] = a * sin[j] + b * cos[j];
+                    }
+
+                    d += m;
+                }
+            }
+        }
+    }
+
 }

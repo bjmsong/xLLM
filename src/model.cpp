@@ -6,15 +6,15 @@ namespace xllm {
     LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): 
         weight(weightPath), tokenizer(tokenPath) {      
         
-        sin.resize(max_positions);
-        cos.resize(max_positions);
+        sin.resize(params.max_positions);
+        cos.resize(params.max_positions);
         std::vector <float> invFreq;
-        for (int i = 0; i < rotary_dim; i += 2) {
-            invFreq.push_back(1.0 / pow(10000, (float)i / rotary_dim));
+        for (int i = 0; i < params.rotary_dim; i += 2) {
+            invFreq.push_back(1.0 / pow(10000, (float)i / params.rotary_dim));
         }
-        for (int i = 0; i < max_positions; i++) {
-            sin[i].resize(rotary_dim);
-            cos[i].resize(rotary_dim);
+        for (int i = 0; i < params.max_positions; i++) {
+            sin[i].resize(params.rotary_dim);
+            cos[i].resize(params.rotary_dim);
             for (int j = 0; j < invFreq.size(); j++) {
                 sin[i][j] = ::sin((float)i * invFreq[j]);
                 cos[i][j] = ::cos((float)i * invFreq[j]);
@@ -27,8 +27,8 @@ namespace xllm {
                 fcos.push_back(cos[i][j]);
             }
         }
-        sinData.CopyFrom(Data(DataType::FLOAT32, {(int)this->sin.size(), (int)this->sin[0].size()}, fsin));
-        cosData.CopyFrom(Data(DataType::FLOAT32, {(int)this->cos.size(), (int)this->cos[0].size()}, fcos));
+        sinData = Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin);
+        cosData = Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos);
         
         WarmUp();
     }
@@ -47,6 +47,21 @@ namespace xllm {
         std::string last =  B_INST + input_trim + E_INST + output_trim;
         std::vector<float> lastchat = tokenizer.Encode(last, true ,true);
         history.insert(history.end(), lastchat.begin(), lastchat.end());
+    }
+
+    void LlamaModel::WarmUp() {
+        printf("Warmup...\n");
+        Data inputIds = Data(DataType::FLOAT32, {1, 1}, {1});
+        Data attentionMask = Data(DataType::FLOAT32, {1, 1}, {0});
+        Data positionIds = Data(DataType::FLOAT32, {1, 1}, {0, 0});
+
+        std::vector <std::pair <Data, Data> > pastKeyValues;
+        for (int i = 0; i < params.block_cnt; i++) {
+            pastKeyValues.push_back(std::make_pair(Data(DataType::FLOAT32),
+                                                   Data(DataType::FLOAT32)));
+        }
+        Forward(inputIds, attentionMask, positionIds, pastKeyValues);
+        printf("finish.\n");
     }
 
     std::string LlamaModel::Response(const std::vector<float>& input, RuntimeResult retCb,
@@ -149,15 +164,15 @@ namespace xllm {
             Linear(attenInput, weight[kWeightName], k);
             Linear(attenInput, weight[vWeightName], v);
 
-            std::vector <int> qkvSize = {bsz, seqlen, num_attention_heads, -1};
+            std::vector <int> qkvSize = {bsz, seqlen, params.num_attention_heads, -1};
             q.Reshape(qkvSize);
             k.Reshape(qkvSize);
             v.Reshape(qkvSize);
 
-            LlamaRotatePosition2D(q, positionIds, sinData, cosData, rotary_dim);
-            LlamaRotatePosition2D(k, positionIds, sinData, cosData, rotary_dim);
+            LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
+            LlamaRotatePosition2D(k, positionIds, sinData, cosData, params.rotary_dim);
 
-            qkvSize = {bsz * seqlen, num_attention_heads, -1};
+            qkvSize = {bsz * seqlen, params.num_attention_heads, -1};
             q.Reshape(qkvSize);
             k.Reshape(qkvSize);
             v.Reshape(qkvSize);
