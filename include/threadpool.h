@@ -8,30 +8,6 @@
 #include <functional>
 #include <future>
 
-/*
-    const int numThreads = 4;
-    ThreadPool pool(numThreads);
-
-    std::vector<std::future<int>> results;
-    for (int i = 1; i <= 10; ++i) {
-        results.emplace_back(
-            pool.enqueue([i] {
-                std::cout << "task " << i << " started\n";
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                int res = i * i;
-                std::cout << "task " << i << " finished\n";
-                return res;
-            })
-        );
-    }
-
-    int sum = 0;
-    for (auto& result : results) {
-        sum += result.get();
-    }
-    std::cout << "sum = " << sum << "\n";
-}
-*/
 
 class ThreadPool {
 public:

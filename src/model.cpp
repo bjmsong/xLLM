@@ -142,8 +142,7 @@ namespace xllm {
 
         Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
         Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
-        Data qkv;
-        Data attenWeights, attenOutput;
+        Data attenOutput;
         Data attenLastOutput;
         Data w1, w2, w3;
 
@@ -211,6 +210,7 @@ namespace xllm {
 
             // 1.2 Attention
             // 1.2.0 q * k^T
+            Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
             if (attentionMask.dims.size() != 0) {

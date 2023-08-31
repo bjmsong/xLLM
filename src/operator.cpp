@@ -466,7 +466,7 @@ namespace xllm{
         std::vector <int> oldDims = dims;
         dims[axis] += input1.dims[axis];
         input0.Resize(dims);
-        input0.counts += input1.Count(axis);
+        input0.counts += input1.counts;
         int unitSize = input0.unitSize;
         input0.bytes += (input1.Count(axis) * unitSize - 1) / input0.unitSizeDiv + 1;
 
@@ -478,6 +478,78 @@ namespace xllm{
             memcpy(input0.cpuData + o * input0Stride * unitSize + oldDims[axis] * inner * unitSize,
                    input1.cpuData + o * input1Stride * unitSize,
                    input1Stride * unitSize);
+        }
+    }
+
+    void MatMulTransBSingle(float *input0Base, float *input1Base, float *outputBase,
+                                int input0Spatial, int input1Spatial, int outputSpatial,
+                                int input0Stride, int input1Stride,
+                                int n, int m, int k, float alpha, int st, int end) {
+            for (int b = st; b < end; b++) {
+                float *input0Data = input0Base + b * input0Spatial;
+                float *input1Data = input1Base + b * input1Spatial;
+                float *outputData = outputBase + b * outputSpatial;
+                for (int i = 0; i < n; i++) {
+                    for (int j = 0; j < k; j++) {
+                        float now = 0.0f;
+                        int l = 0;
+    #if defined(__AVX__)
+                        __m256 vsum = _mm256_set1_ps(0.0f);
+                        for (; l + 7 < m; l += 8) {
+                            __m256 vx = _mm256_loadu_ps((const float *) (input0Data + i * input0Stride + l));
+                            __m256 vy = _mm256_loadu_ps((const float *) (input1Data + j * input1Stride + l));
+                            vsum = _mm256_add_ps(vsum, _mm256_mul_ps(vx, vy));
+                        }
+                        now += Floatsum(vsum);
+    #endif
+                        for (; l < m; l++) {
+                            now += input0Data[i * input0Stride + l] * input1Data[j * input1Stride + l];
+                        }
+                        outputData[i * k + j] = now * alpha;
+                    }
+                }
+            }
+        }
+
+    // input0(batch, n, m) * input1(batch, k, m)^T = output(batch, n, k)
+    void MatMulTransB(Data &input0, Data &input1, Data &output, float alpha) {
+        output.Allocate();
+
+        int input0Spatial = input0.Count(input0.dims.size() - 2);
+        int input1Spatial = input1.Count(input1.dims.size() - 2);
+        int input0Stride = input0.strides[input0.dims.size() - 2];
+        int input1Stride = input1.strides[input1.dims.size() - 2];
+        int n = input0.dims[input0.dims.size() - 2];
+        int m = input0.dims.back();
+        int k = input1.dims[input1.dims.size() - 2];
+        int batch = input0.counts / input0Spatial;
+
+        int outputSpatial = output.Count(output.dims.size() - 2);
+        int threadNum = GetThreads();
+        if (batch * n * m * k < 64 * 4096) {
+            threadNum = 1;
+        }
+        threadNum = std::min(threadNum, 4);
+        int per = batch / threadNum;
+        int cur = 0;
+        auto pool = GetPool();
+        std::vector <std::future <void> > futures;
+        if (input0.dataType == DataType::FLOAT32) {
+            for (int i = 0; i < threadNum - 1; i++) {
+                int end = cur + per + (cur + per * (threadNum - i) < batch);
+                futures.push_back(pool->enqueue(MatMulTransBSingle,
+                                               (float *) input0.cpuData, (float *) input1.cpuData,
+                                               (float *) output.cpuData,
+                                               input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                                               n, m, k, alpha, cur, end));
+                cur = end;
+            }
+            MatMulTransBSingle((float *) input0.cpuData, (float *) input1.cpuData, (float *) output.cpuData,
+                               input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                               n, m, k, alpha, cur, batch);
+        } 
+        for (int i = 0; i < futures.size(); i++) {
+            futures[i].get();
         }
     }
 

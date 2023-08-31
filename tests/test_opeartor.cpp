@@ -14,6 +14,8 @@ TEST(test_operator, all) {
     Embedding(tokens, weight["embed_tokens.weight"], hiddenStates);
     ASSERT_EQ(hiddenStates.counts, 5*4096);
     ASSERT_NE(((float *)hiddenStates.cpuData)[0], 0);
+    ASSERT_NE(((float *)hiddenStates.cpuData)[5*4096-1], 0);
+    ASSERT_EQ(((float *)hiddenStates.cpuData)[5*4096], 0);
 
     Data attenInput(DataType::FLOAT32, hiddenStates.dims);
     RMSNorm(hiddenStates, weight["layers." + std::to_string(0) + ".input_layernorm.weight"],
@@ -24,6 +26,7 @@ TEST(test_operator, all) {
     std::string vWeightName = "layers." + std::to_string(0) + ".self_attn.v_proj.weight";
     Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
     Linear(attenInput, weight[qWeightName], q);
+    ASSERT_EQ(q.counts, 5*4096);
 
     ModelArgs params;
     int bsz = 1, seqlen = attenInput.dims[0];
@@ -63,7 +66,7 @@ TEST(test_operator, all) {
     Data positionIds = Data(DataType::FLOAT32, {1, seqlen}, vpids);
 
     LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
-
+    ASSERT_EQ(q.counts, 4*4096);
 }
 
 TEST(test_operator, Linear_fp32) {
@@ -78,7 +81,7 @@ TEST(test_operator, Linear_fp32) {
 }
 
 
-TEST(test_operator, PermuteSelf_102) {
+TEST(test_operator, PermuteSelf_axis_102) {
     std::vector<float> v;
     for (int i = 0; i < 24; i ++) {
         v.push_back(i);
@@ -95,11 +98,63 @@ TEST(test_operator, PermuteSelf_102) {
 }
 
 TEST(test_operator, CatDirect) {
+    // pastKey扩容
     Data pastKey(DataType::FLOAT32);
+    std::vector<int> dims{2,10,3};
+    pastKey.Expansion(dims);
+
+    // 第一次concat
     std::vector<float> k_vector;
     for (int i = 0; i < 6; i ++) {
         k_vector.push_back(i);
     }
     Data k(DataType::FLOAT32, {2, 1, 3}, k_vector);
     CatDirect(pastKey, k, 1);
+    // first head
+    ASSERT_EQ(((float*)pastKey.cpuData)[0], 0);
+    ASSERT_EQ(((float*)pastKey.cpuData)[1], 1);
+    ASSERT_EQ(((float*)pastKey.cpuData)[2], 2);
+    ASSERT_EQ(((float*)pastKey.cpuData)[3], 0);
+    ASSERT_EQ(((float*)pastKey.cpuData)[4], 0);
+    // second head
+    ASSERT_EQ(((float*)pastKey.cpuData)[30], 3);
+    ASSERT_EQ(((float*)pastKey.cpuData)[31], 4);
+    ASSERT_EQ(((float*)pastKey.cpuData)[32], 5);
+    ASSERT_EQ(((float*)pastKey.cpuData)[33], 0);
+
+    ASSERT_EQ(pastKey.counts, 6);
+    ASSERT_EQ(pastKey.expandCounts, 60);
+    ASSERT_EQ(pastKey.assignBytes, 60*4);
+
+    // 第二次concat
+    std::vector<float> k_vector2;
+    for (int i = 0; i < 6; i ++) {
+        k_vector2.push_back(i*10);
+    }
+    Data k2(DataType::FLOAT32, {2, 1, 3}, k_vector2);
+    CatDirect(pastKey, k2, 1);
+
+    // first head
+    ASSERT_EQ(((float*)pastKey.cpuData)[0], 0);
+    ASSERT_EQ(((float*)pastKey.cpuData)[1], 1);
+    ASSERT_EQ(((float*)pastKey.cpuData)[2], 2);
+    ASSERT_EQ(((float*)pastKey.cpuData)[3], 0);
+    ASSERT_EQ(((float*)pastKey.cpuData)[4], 10);
+    ASSERT_EQ(((float*)pastKey.cpuData)[5], 20);
+    ASSERT_EQ(((float*)pastKey.cpuData)[6], 0);
+    // second head
+    ASSERT_EQ(((float*)pastKey.cpuData)[30], 3);
+    ASSERT_EQ(((float*)pastKey.cpuData)[31], 4);
+    ASSERT_EQ(((float*)pastKey.cpuData)[32], 5);
+    ASSERT_EQ(((float*)pastKey.cpuData)[33], 30);
+    ASSERT_EQ(((float*)pastKey.cpuData)[34], 40);
+    ASSERT_EQ(((float*)pastKey.cpuData)[35], 50);
+    ASSERT_EQ(((float*)pastKey.cpuData)[36], 0);
+
+    ASSERT_EQ(pastKey.counts, 12);
+    ASSERT_EQ(pastKey.expandCounts, 60);
+    ASSERT_EQ(pastKey.assignBytes, 60*4);
+    ASSERT_EQ(pastKey.dims[0], 2);
+    ASSERT_EQ(pastKey.dims[1], 2);
+    ASSERT_EQ(pastKey.dims[2], 3);
 }
