@@ -11,6 +11,8 @@
 #include "xllm.h"
 #include "operator.h"
 
+using RuntimeResult = std::function<void(int index, const char* content)>;
+
 namespace xllm {
 
     struct LastTokensUnit {
@@ -68,8 +70,6 @@ namespace xllm {
 
         std::vector<std::vector<float> > sin, cos;
         Data sinData, cosData;
-
-        ResponseContextDict responseContextDict;
 
         std::thread *mainLoop = nullptr;
         std::mutex mainLoopLocker, dictLocker;

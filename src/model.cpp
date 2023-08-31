@@ -119,9 +119,6 @@ namespace xllm {
             inputIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)ret}));
             attentionMask = Data();
             positionIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)len}));
-            //if (do_sample) {
-            //    tokenPenaltyManager.InsertToken(ret);
-            //}
             len++;
             if (index == generationConfig.output_token_limit) {
                 break;
@@ -139,16 +136,18 @@ namespace xllm {
                             std::vector<std::pair<Data, Data>> &pastKeyValues,
                             const GenerationConfig &generationConfig, const LastTokensManager &lastTokens,
                             std::vector <float> *retLogits) {
-
-        Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
-        Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
-        Data attenLastOutput;
-        Data w1(DataType::FLOAT32, {inputIds.dims[1], params.intermediate_size});
-        Data w3(DataType::FLOAT32, {inputIds.dims[1], params.intermediate_size});
-        Data w2(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
-
+        
+        int bsz = 1, seqlen = inputIds.dims[1];
+        Data hiddenStates(DataType::FLOAT32, {seqlen, params.embed_dim});
         Embedding(inputIds, weight["embed_tokens.weight"], hiddenStates);
+
         Data attenInput(DataType::FLOAT32, hiddenStates.dims);
+        Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
+        Data attenOutput(DataType::FLOAT32, {1, params.num_attention_heads, bsz* seqlen, -1});
+        Data attenLastOutput(DataType::FLOAT32, {seqlen, params.hidden_size});
+        Data w1(DataType::FLOAT32, {seqlen, params.intermediate_size});
+        Data w3(DataType::FLOAT32, {seqlen, params.intermediate_size});
+        Data w2(DataType::FLOAT32, {seqlen, params.hidden_size});
         for (int i = 0; i < params.block_cnt; i++) {
             RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
@@ -158,7 +157,6 @@ namespace xllm {
             std::string oWeightName = "layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
-            int bsz = 1, seqlen = attenInput.dims[0];
             Linear(attenInput, weight[qWeightName], q);
             Linear(attenInput, weight[kWeightName], k);
             Linear(attenInput, weight[vWeightName], v);
@@ -191,7 +189,6 @@ namespace xllm {
                     newDims = pastKey.dims;
                     newDims[1] += ((k.dims[1] - 1) / unitLen + 1) * unitLen;
                 }
-                // Expansion之后不同head之间的内存不连续
                 pastKey.Expansion(newDims);
             }
             while ((pastValue.dims.size() == 0 && (pastValue.expandDims.size() == 0 || v.dims[1] > pastValue.expandDims[1]))
@@ -211,6 +208,8 @@ namespace xllm {
 
             // 1.2 Attention
             // 1.2.0 q * k^T
+            // q: {num_attention_heads, bsz * seqlen, hidden_size/num_attention_heads}
+            // pastKey: {num_attention_heads, k_seqlen, hidden_size/num_attention_heads} 不同head之间的内存不连续
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
@@ -220,15 +219,20 @@ namespace xllm {
             }
 
             SoftMax(attenWeights, attenWeights, -1);
-            Data attenOutput(DataType::FLOAT32, {1, params.num_attention_heads, pastKey.dims[1], -1});
+            // attenWeights: {1, num_attention_heads, bsz * seqlen, k_seqlen}
+            // pastValue: {num_attention_heads, k_seqlen, hidden_size/num_attention_heads} 不同head之间的内存不连续
+            // attenOutput: {1, num_attention_heads, bsz * seqlen, hidden_size/num_attention_heads}
             MatMul(attenWeights, pastValue, attenOutput);
 
             attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
             PermuteSelf(attenOutput, axisData);  // 这里为啥要转置
+            // {bsz, seqLen, hidden_size}
             attenOutput.Reshape({bsz, seqlen, -1});
 
+            // weight[oWeightName]: {hidden_size, hidden_size}
             Linear(attenOutput, weight[oWeightName], attenLastOutput);
             AddTo(hiddenStates, attenLastOutput);
+
             // 2. mlp
             RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".post_attention_layernorm.weight"], attenInput, 1e-6);
             Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.gate_proj.weight"],  w1);
@@ -243,12 +247,8 @@ namespace xllm {
         Data logits;
         Linear(hiddenStates, weight["lm_head.weight"], logits);
 
+        // 采样
         int lastRet = -1;
-        if (generationConfig.output_logits && retLogits != nullptr) {
-            int size = logits.dims.back();
-            retLogits->resize(size);
-            memcpy((float*)retLogits->data(), ((float*)logits.cpuData) + (logits.dims[1] - 1) * size, size * logits.unitSize);
-        }
         if (generationConfig.IsSimpleGreedy()) {
             std::pair <float, int> ret = std::make_pair(-1e9, -1);
             int base = logits.dims[1] - 1;
@@ -256,8 +256,6 @@ namespace xllm {
                 ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
             }
             lastRet = ret.second;
-        } else if (!lastTokens.units.empty()) {
-            lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
         }
 
         return lastRet;

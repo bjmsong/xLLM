@@ -519,7 +519,7 @@ namespace xllm{
         output.Allocate();
 
         int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.expandDims[input1.dims.size() - 2];
+        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];
         int input0Stride = input0.strides[input0.dims.size() - 2];
         int input1Stride = input1.strides[input1.dims.size() - 2];
         int outputSpatial = output.Count(output.dims.size() - 2);
@@ -711,7 +711,7 @@ namespace xllm{
         output.Allocate();
 
         int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.Count(input1.dims.size() - 2);
+        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];
         int input0Stride = input0.strides[input0.dims.size() - 2];
         int input1Stride = input1.strides[input1.dims.size() - 2];
         int n = input0.dims[input0.dims.size() - 2];
@@ -804,5 +804,5 @@ namespace xllm{
             outputData[i] = x / (1.0 + expf(-x));
         }
     }
-    
+
 }

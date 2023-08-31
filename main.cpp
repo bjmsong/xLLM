@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         }
         std::string ret = model->Response(model->MakeInput(history, round, input), [](int index, const char* content) {
             if (index == 0) {
-                printf("%s:%s", modelType.c_str(), content);
+                printf("%s", content);
                 fflush(stdout);
             }
             if (index > 0) {

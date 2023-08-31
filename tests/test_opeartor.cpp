@@ -234,7 +234,7 @@ TEST(test_operator, SoftMax) {
 }
 
 TEST(test_operator, MatMul) {
-
+    
 }
 
 TEST(test_operator, AddTo) {
