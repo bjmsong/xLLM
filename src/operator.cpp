@@ -1,4 +1,5 @@
 #include "operator.h"
+#include "data.h"
 
 namespace xllm{
     void Embedding(const Data &input, Data &weight, Data &output) {
@@ -145,7 +146,7 @@ namespace xllm{
     }
 
 
-    // input(n,m) * weight(m,k) = output(n,k)
+    // input(n,m) * weight^T(m,k) = output(n,k)
     void Linear(const Data &input, Data &weight, Data &output) {
         output.Allocate();
         auto st = std::chrono::system_clock::now();
@@ -293,11 +294,7 @@ namespace xllm{
         }
     }
 
-    void Permute(Data &input, Data &output, Data &axisData) {
-        std::vector <int> axis;
-        for (int i = 0; i < axisData.counts; i++) {
-            axis.push_back(((int32_t *) axisData.cpuData)[i]);
-        }
+    void Permute(Data &input, Data &output, std::vector <int> axis) {
 
         output.Allocate();
         uint8_t *tmpData = (uint8_t *) output.cpuData;
@@ -395,16 +392,17 @@ namespace xllm{
         }
     }
 
-    void PermuteSelf(Data &input, Data &axisData) {
-        std::vector <int> axis;
-        for (int i = 0; i < axisData.counts; i++) {
-            axis.push_back(((int32_t *) axisData.cpuData)[i]);
-        }
+    void PermuteSelf(Data &input, std::vector <int> axis) {
 
         AssertInXLLM(input.dataType == DataType::FLOAT32 ||
                         input.dataType == DataType::FLOAT16, "Permute error: datatype should be float32 or float16.");
         AssertInXLLM(axis.size() == input.dims.size(), "Permute error: axis's size should be equal to data's shape's size.");
 
+        std::vector<int> new_dims;
+        for (int i = 0; i < axis.size(); i++) {
+            new_dims.push_back(input.dims[axis[i]]);
+        }
+        
         bool same = false;
         // 下面几种情况不需要移动数据
         // 例如: (1,2,3) -> (2,3,1) / (2,1,3)
@@ -412,16 +410,12 @@ namespace xllm{
         same |= ((axis == std::vector <int>{2, 0, 1, 3}) && input.dims[2] == 1);
         same |= ((axis == std::vector <int>{0, 2, 1, 3}) && (input.dims[1] == 1 || input.dims[2] == 1));
         if (same) {
-            std::vector<int> new_dims;
-            for (int i = 0; i < axis.size(); i++) {
-                new_dims.push_back(input.dims[axis[i]]);
-            }
             input.Resize(new_dims);
             return;
         }
 
-        auto tmp = new Data();
-        Permute(input, *tmp, axisData);
+        auto tmp = new Data(DataType::FLOAT32, new_dims);
+        Permute(input, *tmp, axis);
 
         memcpy(input.cpuData, tmp->cpuData, input.unitSize * input.counts);
         input.Resize(tmp->dims);
@@ -436,11 +430,8 @@ namespace xllm{
 
         // input0还没有数据
         if (input0.dims.size() == 0) {
-            input0.counts = 1;
-            for (int num : input1.dims) {
-                input0.counts *= num;
-            }
-            input0.bytes = (input0.counts * input0.unitSize - 1) / input0.unitSizeDiv + 1;
+            input0.counts = input1.counts;
+            input0.bytes = input1.bytes;
             input0.Resize(input1.dims);
 
             AssertInXLLM(input0.expandDims.size() == input1.dims.size() &&
@@ -463,7 +454,7 @@ namespace xllm{
         // input0已有数据
         AssertInXLLM(input0.dims.size() == input1.dims.size(), "Cat Error: input's shape's size should be same.\n");
         int dimsLen = input0.dims.size();
-        axis = (axis % dimsLen + dimsLen) % dimsLen;
+        // axis = (axis % dimsLen + dimsLen) % dimsLen;
 
         for (int i = 0; i < dimsLen; i++) {
             if (i != axis) {
@@ -475,17 +466,18 @@ namespace xllm{
         std::vector <int> oldDims = dims;
         dims[axis] += input1.dims[axis];
         input0.Resize(dims);
-        int outer = input0.Count(0) / input0.Count(axis);
-        int input0Stride = input0.Count(axis);
-        int input1Stride = input1.Count(axis);
-
-        int inner = input0.strides[axis];
+        input0.counts += input1.Count(axis);
         int unitSize = input0.unitSize;
+        input0.bytes += (input1.Count(axis) * unitSize - 1) / input0.unitSizeDiv + 1;
 
+        int outer = input0.counts / input0.Count(axis);
+        int input1Stride = input1.Count(axis);
+        int input0Stride = input1Stride/input1.dims[axis] * input0.expandDims[axis];
+        int inner = input0.strides[axis];
         for (int o = 0; o < outer; o++) {
             memcpy(input0.cpuData + o * input0Stride * unitSize + oldDims[axis] * inner * unitSize,
-                   input1.cpuData + (o * input1Stride) * unitSize,
-                   input1.dims[axis] * inner * unitSize);
+                   input1.cpuData + o * input1Stride * unitSize,
+                   input1Stride * unitSize);
         }
     }
 

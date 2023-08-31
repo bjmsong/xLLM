@@ -5,9 +5,10 @@
 
 using namespace xllm;
 
-WeightMap weight{"/root/autodl-tmp/llama2_7b_chat.bin"};
 
-TEST(test_opeartor, test_opeartor1) {
+TEST(test_operator, all) {
+    WeightMap weight{"/root/autodl-tmp/llama2_7b_chat.bin"};
+
     Data tokens = Data(DataType::FLOAT32, {1, 5}, {1,2,3,4,5});
     Data hiddenStates(DataType::FLOAT32, {tokens.dims[1], 4096});
     Embedding(tokens, weight["embed_tokens.weight"], hiddenStates);
@@ -63,4 +64,42 @@ TEST(test_opeartor, test_opeartor1) {
 
     LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
 
+}
+
+TEST(test_operator, Linear_fp32) {
+    Data input(DataType::FLOAT32, {2, 2}, {1,2,3,4});
+    Data weight(DataType::FLOAT32, {2, 2}, {1,2,3,4});
+    Data output(DataType::FLOAT32, {2,2});
+    Linear(input, weight, output);
+    ASSERT_EQ(((float*)output.cpuData)[0], 5);
+    ASSERT_EQ(((float*)output.cpuData)[1], 11);
+    ASSERT_EQ(((float*)output.cpuData)[2], 11);
+    ASSERT_EQ(((float*)output.cpuData)[3], 25);
+}
+
+
+TEST(test_operator, PermuteSelf_102) {
+    std::vector<float> v;
+    for (int i = 0; i < 24; i ++) {
+        v.push_back(i);
+    }
+    Data input(DataType::FLOAT32, {2, 3, 4}, v);
+    PermuteSelf(input, {1, 0, 2});
+    ASSERT_EQ(((float*)input.cpuData)[0], 0);
+    ASSERT_EQ(((float*)input.cpuData)[4], 12);
+    ASSERT_EQ(((float*)input.cpuData)[8], 4);
+    ASSERT_EQ(input.dims[0], 3);
+    ASSERT_EQ(input.dims[1], 2);
+    ASSERT_EQ(input.dims[2], 4);
+    ASSERT_EQ(input.counts, 24);
+}
+
+TEST(test_operator, CatDirect) {
+    Data pastKey(DataType::FLOAT32);
+    std::vector<float> k_vector;
+    for (int i = 0; i < 6; i ++) {
+        k_vector.push_back(i);
+    }
+    Data k(DataType::FLOAT32, {2, 1, 3}, k_vector);
+    CatDirect(pastKey, k, 1);
 }

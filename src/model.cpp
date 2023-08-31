@@ -175,7 +175,7 @@ namespace xllm {
             k.Reshape(qkvSize);
             v.Reshape(qkvSize);
 
-            Data axisData = Data(DataType::FLOAT32, {1, 0, 2});
+            std::vector<int> axisData = {1, 0, 2};
             PermuteSelf(q, axisData);
             PermuteSelf(k, axisData);
             PermuteSelf(v, axisData);
@@ -191,6 +191,7 @@ namespace xllm {
                     newDims = pastKey.dims;
                     newDims[1] += ((k.dims[1] - 1) / unitLen + 1) * unitLen;
                 }
+                // Expansion之后不同head之间的内存不连续
                 pastKey.Expansion(newDims);
             }
             while ((pastValue.dims.size() == 0 && (pastValue.expandDims.size() == 0 || v.dims[1] > pastValue.expandDims[1]))

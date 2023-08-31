@@ -50,14 +50,13 @@ make -j4
 5. 量化
 
 
-## 开发者模式
+## 单元测试
 
-开启单元测试
 ```bash
 cmake .. -DDEVELOPMENT=ON
 make -j4
 
-./test/unittest --gtest_filter=test_operator.*
+./tests/unittest --gtest_filter=test_operator.linear
 ```
 
 欢迎star！
