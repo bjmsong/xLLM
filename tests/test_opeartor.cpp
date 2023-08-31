@@ -158,3 +158,93 @@ TEST(test_operator, CatDirect) {
     ASSERT_EQ(pastKey.dims[1], 2);
     ASSERT_EQ(pastKey.dims[2], 3);
 }
+
+
+TEST(test_operator, MatMulTransB){
+    Data input0(DataType::FLOAT32, {2, 2, 1}, {1,2,3,4});
+    Data output(DataType::FLOAT32, {2,2, 3});
+
+    Data pastKey(DataType::FLOAT32);
+    std::vector<int> dims{2,10,1};
+    pastKey.Expansion(dims);
+    std::vector<float> k_vector;
+    for (int i = 0; i < 6; i ++) {
+        k_vector.push_back(i+1);
+    }
+    Data k(DataType::FLOAT32, {2, 3, 1}, k_vector);
+    CatDirect(pastKey, k, 1);
+
+    MatMulTransB(input0, pastKey, output, 1);
+    
+    // head1
+    ASSERT_EQ(((float*)output.cpuData)[0], 1);
+    ASSERT_EQ(((float*)output.cpuData)[1], 2);
+    ASSERT_EQ(((float*)output.cpuData)[2], 3);
+    ASSERT_EQ(((float*)output.cpuData)[3], 2);
+    ASSERT_EQ(((float*)output.cpuData)[4], 4);
+    ASSERT_EQ(((float*)output.cpuData)[5], 6);
+
+    // head2
+    ASSERT_EQ(((float*)output.cpuData)[6], 12);
+    ASSERT_EQ(((float*)output.cpuData)[7], 15);
+    ASSERT_EQ(((float*)output.cpuData)[8], 18);
+    ASSERT_EQ(((float*)output.cpuData)[9], 16);
+    ASSERT_EQ(((float*)output.cpuData)[10], 20);
+    ASSERT_EQ(((float*)output.cpuData)[11], 24);
+}
+
+TEST(test_operator, AttentionMask) {
+    int seqLen = 3;
+    std::vector<float> atten;
+    for (int i = 0; i < 2*seqLen*3; i ++) {
+        atten.push_back(i);
+    } 
+    Data attenWeights(DataType::FLOAT32, {1, 3,seqLen,3}, atten);
+    std::vector <float> vmask = std::vector <float> (seqLen * seqLen, 0);   // mask matrix
+    for (int i = 0; i < seqLen; i++) {
+        for (int j = i + 1; j < seqLen; j++) {
+            vmask[i * seqLen + j] = 1;   // mask标记为1
+        }
+    }
+    Data attentionMask = Data(DataType::FLOAT32, {seqLen, seqLen}, vmask);
+    int maskValue = -100000;
+    AttentionMask(attenWeights, attentionMask, maskValue);
+
+    ASSERT_NE(((float*)attenWeights.cpuData)[0], maskValue);
+    ASSERT_EQ(((float*)attenWeights.cpuData)[1], maskValue);
+    ASSERT_EQ(((float*)attenWeights.cpuData)[2], maskValue);
+
+    ASSERT_NE(((float*)attenWeights.cpuData)[3], maskValue);
+    ASSERT_NE(((float*)attenWeights.cpuData)[4], maskValue);
+    ASSERT_EQ(((float*)attenWeights.cpuData)[5], maskValue);
+
+    ASSERT_NE(((float*)attenWeights.cpuData)[6], maskValue);
+    ASSERT_NE(((float*)attenWeights.cpuData)[7], maskValue);
+    ASSERT_NE(((float*)attenWeights.cpuData)[8], maskValue);
+}
+
+
+TEST(test_operator, SoftMax) {
+    Data input(DataType::FLOAT32, {2,3}, {0.1,0.2,-10000,3,4, -10000});
+    SoftMax(input, input, -1);
+    ASSERT_EQ((((float*)input.cpuData)[0] + ((float*)input.cpuData)[1]), 1);
+    ASSERT_EQ(((float*)input.cpuData)[2], 0);
+    ASSERT_EQ((((float*)input.cpuData)[3] + ((float*)input.cpuData)[4]), 1);
+    ASSERT_EQ(((float*)input.cpuData)[5], 0);
+}
+
+TEST(test_operator, MatMul) {
+
+}
+
+TEST(test_operator, AddTo) {
+
+}
+
+TEST(test_operator, MulTo) {
+
+}
+
+TEST(test_operator, Silu) {
+
+}

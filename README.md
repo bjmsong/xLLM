@@ -1,6 +1,6 @@
 ## 介绍
 
-基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
+练习项目，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
 - 支持llama2-7B
 - 支持CPU加速
 - 支持INT8量化
@@ -58,5 +58,3 @@ make -j4
 
 ./tests/unittest --gtest_filter=test_operator.linear
 ```
-
-欢迎star！

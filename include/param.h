@@ -45,5 +45,6 @@ namespace xllm {
         const float scale_attn = sqrt(head_dim);
         int rotary_dim = 128;  // 官方代码中没有找到
         int max_positions = 32768;  // 32K
+        int intermediate_size = 11008;
     };
 }

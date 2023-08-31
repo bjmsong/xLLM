@@ -78,7 +78,7 @@ namespace xllm {
         for (int i = 0; i < seqLen; i++) {
             vpids[i] = i;
             for (int j = i + 1; j < seqLen; j++) {
-                vmask[i * seqLen + j] = 1;
+                vmask[i * seqLen + j] = 1;   // mask标记为1
             }
         }
         Data attentionMask = Data(DataType::FLOAT32, {seqLen, seqLen}, vmask);
@@ -142,13 +142,14 @@ namespace xllm {
 
         Data hiddenStates(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
         Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
-        Data attenOutput;
         Data attenLastOutput;
-        Data w1, w2, w3;
+        Data w1(DataType::FLOAT32, {inputIds.dims[1], params.intermediate_size});
+        Data w3(DataType::FLOAT32, {inputIds.dims[1], params.intermediate_size});
+        Data w2(DataType::FLOAT32, {inputIds.dims[1], params.embed_dim});
 
         Embedding(inputIds, weight["embed_tokens.weight"], hiddenStates);
+        Data attenInput(DataType::FLOAT32, hiddenStates.dims);
         for (int i = 0; i < params.block_cnt; i++) {
-            Data attenInput(DataType::FLOAT32, hiddenStates.dims);
             RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
             std::string qWeightName = "layers." + std::to_string(i) + ".self_attn.q_proj.weight";
@@ -213,15 +214,17 @@ namespace xllm {
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
+            // 只有第一轮需要mask
             if (attentionMask.dims.size() != 0) {
                 AttentionMask(attenWeights, attentionMask, -10000);
             }
 
-            Softmax(attenWeights, attenWeights, -1);
+            SoftMax(attenWeights, attenWeights, -1);
+            Data attenOutput(DataType::FLOAT32, {1, params.num_attention_heads, pastKey.dims[1], -1});
             MatMul(attenWeights, pastValue, attenOutput);
 
             attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
-            PermuteSelf(attenOutput, axisData);
+            PermuteSelf(attenOutput, axisData);  // 这里为啥要转置
             attenOutput.Reshape({bsz, seqlen, -1});
 
             Linear(attenOutput, weight[oWeightName], attenLastOutput);

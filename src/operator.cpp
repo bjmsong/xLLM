@@ -1,10 +1,12 @@
+#include <cfloat>
+
 #include "operator.h"
 #include "data.h"
 
 namespace xllm{
     void Embedding(const Data &input, Data &weight, Data &output) {
         output.Allocate();
-        int vocabSize = weight.dims[0], embSize = weight.dims[1];
+        int embSize = weight.dims[1];
         float *inputData = (float*)input.cpuData;
         if (weight.dataType == DataType::FLOAT32) {
             float *outputData = (float *) output.cpuData;
@@ -146,13 +148,13 @@ namespace xllm{
     }
 
 
-    // input(n,m) * weight^T(m,k) = output(n,k)
+    // 多维矩阵*二维矩阵乘法：input(n,m) * weight(k,m) + bias = output(n,k)
     void Linear(const Data &input, Data &weight, Data &output) {
         output.Allocate();
         auto st = std::chrono::system_clock::now();
         Data bias;
 
-        int n = input.counts / input.dims.back();
+        int n = input.counts / input.dims.back();  // 前面的维度打包到一个维度
         int m = input.dims.back();
         int k = output.dims.back();
 
@@ -511,20 +513,22 @@ namespace xllm{
             }
         }
 
-    // input0(batch, n, m) * input1(batch, k, m)^T = output(batch, n, k)
+    // 三维矩阵乘法: input0(batch, n, m) * input1(batch, k, m)^T = output(batch, n, k)
+    // TODO: 可以跟Linear整合吗？
     void MatMulTransB(Data &input0, Data &input1, Data &output, float alpha) {
         output.Allocate();
 
         int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.Count(input1.dims.size() - 2);
+        int input1Spatial = input1.expandDims[input1.dims.size() - 2];
         int input0Stride = input0.strides[input0.dims.size() - 2];
         int input1Stride = input1.strides[input1.dims.size() - 2];
+        int outputSpatial = output.Count(output.dims.size() - 2);
+
+        int batch = input0.counts / input0Spatial;
         int n = input0.dims[input0.dims.size() - 2];
         int m = input0.dims.back();
         int k = input1.dims[input1.dims.size() - 2];
-        int batch = input0.counts / input0Spatial;
 
-        int outputSpatial = output.Count(output.dims.size() - 2);
         int threadNum = GetThreads();
         if (batch * n * m * k < 64 * 4096) {
             threadNum = 1;
@@ -553,4 +557,252 @@ namespace xllm{
         }
     }
 
+
+    void AttentionMask(Data &input, const Data &mask, float maskValue) {
+        int spatial = input.Count(2), n = input.dims[0], m = input.dims[1];
+
+        AssertInXLLM(mask.dataType == DataType::FLOAT32, "AttentionMask: mask's datatype should be float32.");
+        if (input.dataType == DataType::FLOAT32) {
+            float *maskData = (float *) mask.cpuData;
+            float *attnData = (float *) input.cpuData;
+            for (int on = 0; on < n; on++) {
+                for (int om = 0; om < m; om++) {
+                    int o = on * m + om;
+                    for (int i = 0; i < spatial; i++) {
+                        if (maskData[on * spatial + i] > 0.99) {
+                            attnData[o * spatial + i] = maskValue;
+                        }
+                    }
+                }
+            }
+        } else if (input.dataType == DataType::FLOAT16) {
+            float *maskData = (float *) mask.cpuData;
+            uint16_t *attnData = (uint16_t *) input.cpuData;
+            uint16_t hMaskValue = float_to_half(maskValue);
+            for (int on = 0; on < n; on++) {
+                for (int om = 0; om < m; om++) {
+                    int o = on * m + om;
+                    for (int i = 0; i < spatial; i++) {
+                        if (maskData[on * spatial + i] > 0.99) {
+                            attnData[o * spatial + i] = hMaskValue;
+                        }
+                    }
+                }
+            }
+        } else {
+            ErrorInXLLM("AttentionMask error: unsupport input's dataType.\n");
+        }
+    }
+
+    void SoftMax(Data &input, Data &output, int axis) {
+        output.Allocate();
+
+        AssertInXLLM(input.dataType == DataType::FLOAT32 || input.dataType == DataType::FLOAT16,
+                        "Softmax error: Data's type should be float32.\n");
+
+        int dimsLen = input.dims.size();
+        axis = (axis % dimsLen + dimsLen) % dimsLen;
+        int outer = input.Count(0) / input.Count(axis);
+        int channels = input.dims[axis];
+        int inner = input.Count(axis + 1);
+
+        float *inputData = (float*)input.cpuData;
+        float *outputData = (float*)output.cpuData;
+
+        if (input.dataType == DataType::FLOAT16) {
+            int len = input.Count(0);
+            inputData = new float[len];
+            outputData = new float[len];
+            for (int i = 0; i < len; i++) {
+                inputData[i] = fp16tofp32.dict[((uint16_t *) input.cpuData)[i]];
+            }
+        }
+
+        if (inner == 1) {
+            for (int i = 0; i < outer; i++) {
+                float maxValue = 0;
+                int j = 0;
+                for (; j < channels; j++) {
+                    maxValue = std::max(maxValue, inputData[j]);
+                }
+
+                j = 0;
+                for (; j < channels; j++) {
+                    outputData[j] = exp(inputData[j] - maxValue);
+                }
+                float sum = 0.0;
+                j = 0;
+                for (; j < channels; j++) {
+                    sum += outputData[j];
+                }
+                if (fabs(sum) < 1e-9) {
+                    sum = 0.1;
+                }
+                j = 0;
+                for (; j < channels; j++) {
+                    outputData[j] = outputData[j] / sum;
+                }
+                inputData += channels;
+                outputData += channels;
+            }
+        } else {
+            for (int i = 0; i < outer; i++) {
+                std::vector<float> maxValue(inner, -FLT_MAX);
+                for (int j = 0; j < channels; j++) {
+                    for (int k = 0; k < inner; k++) {
+                        maxValue[k] = std::max(maxValue[k], inputData[j * inner + k]);
+                    }
+                }
+                std::vector<float> sum(inner, 0.0);
+                for (int j = 0; j < channels; j++) {
+                    for (int k = 0; k < inner; k++) {
+                        outputData[j * inner + k] = std::exp(inputData[j * inner + k] - maxValue[k]);
+                        sum[k] += outputData[j * inner + k];
+                    }
+                }
+
+                for (int j = 0; j < channels; j++) {
+                    for (int k = 0; k < inner; k++) {
+                        outputData[j * inner + k] /= sum[k];
+                    }
+                }
+
+                inputData += channels * inner;
+                outputData += channels * inner;
+            }
+        }
+
+        if (input.dataType == DataType::FLOAT16) {
+            int len = input.Count(0);
+            inputData -= len;
+            outputData -= len;
+            for (int i = 0; i < len; i++) {
+                ((uint16_t *) output.cpuData)[i] = float_to_half(outputData[i]);
+            }
+
+            delete[] inputData;
+            delete[] outputData;
+        }
+    }
+
+    void MatMulSingle(float *input0Base, float *input1Base, float *outputBase,
+                      int input0Spatial, int input1Spatial, int outputSpatial,
+                      int input0Stride, int input1Stride,
+                      int n, int m, int k, float alpha, int st, int end) {
+        for (int b = st; b < end; b++) {
+            float *input0Data = input0Base + b * input0Spatial;
+            float *input1Data = input1Base + b * input1Spatial;
+            float *outputData = outputBase + b * outputSpatial;
+            std::fill(outputData, outputData + n * k, 0.0f);
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < m; j++) {
+                    float now = input0Data[i * input0Stride + j] * alpha;
+                    for (int l = 0; l < k; l++) {
+                        outputData[i * k + l] += (now * input1Data[j * k + l]);
+                    }
+                }
+            }
+        }
+    }
+
+    // TODO: 跟Linear()进行整合
+    // input0(n, m) * input1(m,k) = output(n,k)
+    void MatMul(Data &input0, Data &input1, Data &output) {
+        output.Allocate();
+
+        int input0Spatial = input0.Count(input0.dims.size() - 2);
+        int input1Spatial = input1.Count(input1.dims.size() - 2);
+        int input0Stride = input0.strides[input0.dims.size() - 2];
+        int input1Stride = input1.strides[input1.dims.size() - 2];
+        int n = input0.dims[input0.dims.size() - 2];
+        int m = input0.dims.back();
+        int k = input1.dims.back();
+        int batch = input0.Count(0) / input0Spatial;
+
+        int outputSpatial = output.Count(output.dims.size() - 2);
+        int threadNum = GetThreads();
+        if (batch * n * m * k < 64 * 4096) {
+            threadNum = 1;
+        }
+        threadNum = std::min(threadNum, 4);
+        // TODO: SIMD优化
+        int per = batch / threadNum;
+        int cur = 0;
+        auto pool = GetPool();
+        std::vector <std::future <void> > futures;
+        float alpha = 1.0;
+        if (input0.dataType == DataType::FLOAT32) {
+            for (int i = 0; i < threadNum - 1; i++) {
+                int end = cur + per + (cur + per * (threadNum - i) < batch);
+                futures.push_back(pool->enqueue(MatMulSingle,
+                                               (float *) input0.cpuData, (float *) input1.cpuData,
+                                               (float *) output.cpuData,
+                                               input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                                               n, m, k, alpha, cur, end));
+                cur = end;
+            }
+            MatMulSingle((float *) input0.cpuData, (float *) input1.cpuData, (float *) output.cpuData,
+                         input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                         n, m, k, alpha, cur, batch);
+        } 
+        for (int i = 0; i < futures.size(); i++) {
+            futures[i].get();
+        }
+    }
+
+    void AddTo(Data &input0, Data &input1) {
+        float alpha = 1.0;
+
+        AssertInXLLM(input0.dataType == DataType::FLOAT32 || input1.dataType == DataType::FLOAT16,
+                        "AddTo error: Data's type should be float32 or float16.\n");
+        AssertInXLLM(input0.dims == input1.dims, "AddTo error: input's shape should be same.\n");
+
+        int len = input0.Count(0);
+
+        if (input0.dataType == DataType::FLOAT32) {
+            float *input0Data = (float *) input0.cpuData;
+            float *input1Data = (float *) input1.cpuData;
+            for (int i = 0; i < len; i++) {
+                input0Data[i] += input1Data[i] * alpha;
+            }
+        } else if (input0.dataType == DataType::FLOAT16) {
+            uint16_t *input0Data = (uint16_t *) input0.cpuData;
+            uint16_t *input1Data = (uint16_t *) input1.cpuData;
+            for (int i = 0; i < len; i++) {
+                input0Data[i] = float_to_half(fp16tofp32.dict[input0Data[i]] + fp16tofp32.dict[input1Data[i]] * alpha);
+            }
+        }
+    }
+
+    void MulTo(Data &input0, Data &input1) {
+        AssertInXLLM(input0.dims == input1.dims, "MulTo error: input's shape should be same.\n");
+
+        float *input0Data = (float*)input0.cpuData;
+        float *input1Data = (float*)input1.cpuData;
+
+        int len = input0.Count(0);
+        int inner = input1.Count(0);
+        AssertInXLLM(len % inner == 0, "MulTo error: Data`s shape can`t perform MulTo operation.\n");
+        int round = (len / inner);
+        for (int j = 0; j < round; j++) {
+            for (int i = 0; i < len; i++) {
+               input0Data[i] *= input1Data[i];
+            }
+            input0Data += inner;
+        }
+    }
+
+    void Silu(Data &input, Data &output) {
+        output.Allocate();
+        AssertInXLLM(input.dataType == DataType::FLOAT32, "Silu error: Data's type should be float32.\n");
+        float *inputData = (float*)input.cpuData;
+        float *outputData = (float*)output.cpuData;
+        int len = input.Count(0);
+        int i = 0;
+        for (; i < len; i++) {
+            float x = inputData[i];
+            outputData[i] = x / (1.0 + expf(-x));
+        }
+    }
+    
 }

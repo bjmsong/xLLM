@@ -19,4 +19,18 @@ namespace xllm{
     void PermuteSelf(Data &input, std::vector <int> axis);
 
     void CatDirect(Data &input0, Data &input1, int axis);
+
+    void MatMulTransB(Data &input0, Data &input1, Data &output, float alpha);
+
+    void AttentionMask(Data &input, const Data &mask, float maskValue);
+
+    void SoftMax(Data &input, Data &output, int axis);
+
+    void MatMul(Data &input0, Data &input1, Data &output);
+
+    void AddTo(Data &input0, Data &input1);
+
+    void MulTo(Data &input0, Data &input1);
+
+    void Silu(Data &input, Data &output);
 }
