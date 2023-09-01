@@ -1,0 +1,14 @@
+{
+    "clangd.fallbackFlags": [
+        // 设置clangd代码检查的c++版本，目前默认是c++14
+        "-std=c++2a",
+        // 增加项目自身头文件依赖路径，因为使用vs2019编译不会生成compile_command.json文件，项目自己的头文件就不会找到
+        "-I${workspaceFolder}", // 项目根目录
+        "-I${workspaceFolder}/include",
+        "-I/usr/lib/llvm-10/include/c++/v1",
+        "-I/usr/local/cuda-11.8/targets/x86_64-linux/include",
+        "-I/usr/local/include/c++/11.2.0",
+        "-I/usr/local/include/c++/11.2.0/x86_64-pc-linux-gnu",
+        "--gcc-toolchain=/usr/local/bin/gcc"
+      ]
+}

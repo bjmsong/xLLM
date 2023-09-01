@@ -1,5 +1,5 @@
 import sys
-from transformers import AutoModel
+from transformers import AutoModelForCausalLM
 
 import struct
 import numpy as np
@@ -69,6 +69,8 @@ def tofile(exportPath,
 
     # 1. model info
     modelInfo = model.config.__dict__
+    if model.generation_config is not None:
+        modelInfo.update(model.generation_config.__dict__)
     if ("model_type" not in modelInfo):
         print("unknown model_type.")
         exit(0)
@@ -136,7 +138,7 @@ def tofile(exportPath,
     fo.close()
 
 if __name__ == "__main__":
-    model = AutoModel.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf").float()
+    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf").float()
     model = model.eval()
 
     exportPath = sys.argv[1]

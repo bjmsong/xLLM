@@ -138,23 +138,23 @@ namespace xllm {
                             std::vector <float> *retLogits) {
         
         int bsz = 1, seqlen = inputIds.dims[1];
-        Data hiddenStates(DataType::FLOAT32, {seqlen, params.embed_dim});
-        Embedding(inputIds, weight["embed_tokens.weight"], hiddenStates);
+        Data hiddenStates(DataType::FLOAT32, {bsz, seqlen, params.embed_dim});
+        Embedding(inputIds, weight["model.embed_tokens.weight"], hiddenStates);
 
         Data attenInput(DataType::FLOAT32, hiddenStates.dims);
         Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
-        Data attenOutput(DataType::FLOAT32, {1, params.num_attention_heads, bsz* seqlen, params.hidden_size/params.num_attention_heads});
-        Data attenLastOutput(DataType::FLOAT32, {seqlen, params.hidden_size});
-        Data w1(DataType::FLOAT32, {seqlen, params.intermediate_size});
-        Data w3(DataType::FLOAT32, {seqlen, params.intermediate_size});
-        Data w2(DataType::FLOAT32, {seqlen, params.hidden_size});
+        Data attenOutput(DataType::FLOAT32, {bsz, params.num_attention_heads, bsz* seqlen, params.hidden_size/params.num_attention_heads});
+        Data attenLastOutput(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
+        Data w1(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
+        Data w3(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
+        Data w2(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
         for (int i = 0; i < params.block_cnt; i++) {
-            RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".input_layernorm.weight"],
+            RMSNorm(hiddenStates, weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
-            std::string qWeightName = "layers." + std::to_string(i) + ".self_attn.q_proj.weight";
-            std::string kWeightName = "layers." + std::to_string(i) + ".self_attn.k_proj.weight";
-            std::string vWeightName = "layers." + std::to_string(i) + ".self_attn.v_proj.weight";
-            std::string oWeightName = "layers." + std::to_string(i) + ".self_attn.o_proj.weight";
+            std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
+            std::string kWeightName = "model.layers." + std::to_string(i) + ".self_attn.k_proj.weight";
+            std::string vWeightName = "model.layers." + std::to_string(i) + ".self_attn.v_proj.weight";
+            std::string oWeightName = "model.layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
             Linear(attenInput, weight[qWeightName], q);
@@ -235,24 +235,24 @@ namespace xllm {
             AddTo(hiddenStates, attenLastOutput);
 
             // 2. mlp
-            RMSNorm(hiddenStates, weight["layers." + std::to_string(i) + ".post_attention_layernorm.weight"], attenInput, 1e-6);
-            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.gate_proj.weight"],  w1);
-            Linear(attenInput, weight["layers." + std::to_string(i) + ".mlp.up_proj.weight"],  w3);
+            RMSNorm(hiddenStates, weight["model.layers." + std::to_string(i) + ".post_attention_layernorm.weight"], attenInput, 1e-6);
+            Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.gate_proj.weight"],  w1);
+            Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.up_proj.weight"],  w3);
             Silu(w1, w1);
             MulTo(w1, w3);
-            Linear(w1, weight["layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
+            Linear(w1, weight["model.layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
             AddTo(hiddenStates, w2);
         }
 
-        RMSNorm(hiddenStates, weight["norm.weight"], hiddenStates, 1e-6);
-        Data logits(DataType::FLOAT32, {hiddenStates.dims[0], params.vocab_size});
-        Linear(hiddenStates, weight["embed_tokens.weight"], logits);
+        RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
+        Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
+        Linear(hiddenStates, weight["lm_head.weight"], logits);
 
         // 采样
         int lastRet = -1;
         if (generationConfig.IsSimpleGreedy()) {
             std::pair <float, int> ret = std::make_pair(-1e9, -1);
-            int base = logits.dims[0] - 1;
+            int base = logits.dims[1] - 1;
             for (int i = 0; i < logits.dims.back(); i++) {
                 ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
             }
