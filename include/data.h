@@ -58,6 +58,7 @@ class Data {
         void Allocate(); // 分配内存
         void MallocSpace(uint64_t bytes); // 在设备上分配
         void FreeSpace(); // 回收设备上的内存
+        void Allocate(float v);
 
         void UpdateUnitSize(); // 更新unitSize
 

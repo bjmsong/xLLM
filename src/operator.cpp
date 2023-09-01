@@ -150,7 +150,7 @@ namespace xllm{
 
     // 多维矩阵*二维矩阵乘法：input(n,m) * weight(k,m) + bias = output(n,k)
     void Linear(const Data &input, Data &weight, Data &output) {
-        output.Allocate();
+        output.Allocate(0);
         // auto st = std::chrono::system_clock::now();
         Data bias;
 

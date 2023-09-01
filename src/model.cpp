@@ -36,7 +36,7 @@ namespace xllm {
     std::vector<float> LlamaModel::MakeInput(std::vector<float> &history, int round, const std::string &input) {
         std::string input_trim = trim(input);
         std::string prompt = (round == 0 ? pre_prompt : "") + B_INST + input_trim + E_INST;
-        std::vector<float> inputIds = tokenizer.Encode(input, true);
+        std::vector<float> inputIds = tokenizer.Encode(prompt, true);
         history.insert(history.end(), inputIds.begin(), inputIds.end());
         return history;
     }
@@ -96,7 +96,7 @@ namespace xllm {
 
         LastTokensManager tokens (1, generationConfig.last_n);
         while (true) {
-            auto st = std::chrono::system_clock::now();
+            // auto st = std::chrono::system_clock::now();
 
             int ret = Forward(inputIds, attentionMask, positionIds, pastKeyValues, generationConfig, tokens);
             tokens.units[0].Push(ret);
@@ -105,7 +105,7 @@ namespace xllm {
             }
 
             results.push_back(ret);
-            std::string curString = tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results)).c_str();
+            std::string curString = tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results));
             retString += curString;
             if (retCb)
                 retCb(index, curString.c_str());
@@ -124,7 +124,7 @@ namespace xllm {
                 break;
             }
 
-            printf("spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
+            // printf("spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
         }
         if (retCb)
             retCb(-1, retString.c_str());
@@ -157,6 +157,9 @@ namespace xllm {
             std::string oWeightName = "model.layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
+            q.Reshape(hiddenStates.dims);
+            k.Reshape(hiddenStates.dims);
+            v.Reshape(hiddenStates.dims);
             Linear(attenInput, weight[qWeightName], q);
             Linear(attenInput, weight[kWeightName], k);
             Linear(attenInput, weight[vWeightName], v);

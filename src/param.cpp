@@ -73,14 +73,7 @@ namespace xllm{
         
 
     std::string Tokenizer::Decode(const Data& data) {
-        std::vector <int> tokens;
-        for (int i = 0; i < data.counts; i++) {
-            tokens.push_back((int) ((float *) data.cpuData)[i]);
-        }
-
-        
-
-        return "";
+        return id_token[((float *) data.cpuData)[0]];
     }
 
     WeightMap::WeightMap(const std::string &fileName){

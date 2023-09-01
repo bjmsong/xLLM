@@ -63,7 +63,7 @@ namespace xllm {
         Tokenizer tokenizer;
         WeightMap weight;
 
-        std::string pre_prompt= ""; // 系统设定
+        std::string pre_prompt= "";
         const std::string B_INST{"[INST] "}, E_INST{" [/INST]"}, EOS{""};
 
         ModelArgs params;
