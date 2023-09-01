@@ -151,7 +151,7 @@ namespace xllm{
     // 多维矩阵*二维矩阵乘法：input(n,m) * weight(k,m) + bias = output(n,k)
     void Linear(const Data &input, Data &weight, Data &output) {
         output.Allocate();
-        auto st = std::chrono::system_clock::now();
+        // auto st = std::chrono::system_clock::now();
         Data bias;
 
         int n = input.counts / input.dims.back();  // 前面的维度打包到一个维度
@@ -235,9 +235,9 @@ namespace xllm{
             ErrorInXLLM("Linear error: unsupport input's dataType.\n");
         }
 
-        float spend = GetSpan(st, std::chrono::system_clock::now());
-        float gops = (float)2* n * m * k / spend / 1e9;
-        printf("n = %d, m = %d, k = %d, spend %f s, gops = %f\n", n, m, k, spend, gops);
+        // float spend = GetSpan(st, std::chrono::system_clock::now());
+        // float gops = (float)2* n * m * k / spend / 1e9;
+        // printf("n = %d, m = %d, k = %d, spend %f s, gops = %f\n", n, m, k, spend, gops);
     }
 
     void LlamaRotatePosition2D(Data &input, const Data &positionIds, Data &sinData, Data &cosData, int rotaryDim) {

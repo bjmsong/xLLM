@@ -93,8 +93,8 @@ namespace xllm{
             params[key] = value;
         }
 
-        for(auto& pair:params)
-            std::cout << "Key: " << pair.first << " Value: " << pair.second << std::endl;
+        // for(auto& pair:params)
+        //     std::cout << "Key: " << pair.first << " Value: " << pair.second << std::endl;
     
         int weightLen = buffer.ReadInt();
         for (int i = 0; i < weightLen; i++) {

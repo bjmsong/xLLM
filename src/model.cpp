@@ -30,7 +30,7 @@ namespace xllm {
         sinData.CopyFrom(Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin));
         cosData.CopyFrom(Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos));
         
-        WarmUp();
+        // WarmUp();
     }
 
     std::vector<float> LlamaModel::MakeInput(std::vector<float> &history, int round, const std::string &input) {
@@ -143,7 +143,7 @@ namespace xllm {
 
         Data attenInput(DataType::FLOAT32, hiddenStates.dims);
         Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
-        Data attenOutput(DataType::FLOAT32, {1, params.num_attention_heads, bsz* seqlen, -1});
+        Data attenOutput(DataType::FLOAT32, {1, params.num_attention_heads, bsz* seqlen, params.hidden_size/params.num_attention_heads});
         Data attenLastOutput(DataType::FLOAT32, {seqlen, params.hidden_size});
         Data w1(DataType::FLOAT32, {seqlen, params.intermediate_size});
         Data w3(DataType::FLOAT32, {seqlen, params.intermediate_size});
@@ -222,6 +222,7 @@ namespace xllm {
             // attenWeights: {1, num_attention_heads, bsz * seqlen, k_seqlen}
             // pastValue: {num_attention_heads, k_seqlen, hidden_size/num_attention_heads} 不同head之间的内存不连续
             // attenOutput: {1, num_attention_heads, bsz * seqlen, hidden_size/num_attention_heads}
+            attenOutput.Reshape({1, params.num_attention_heads, bsz * seqlen, -1});
             MatMul(attenWeights, pastValue, attenOutput);
 
             attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
@@ -244,14 +245,14 @@ namespace xllm {
         }
 
         RMSNorm(hiddenStates, weight["norm.weight"], hiddenStates, 1e-6);
-        Data logits;
-        Linear(hiddenStates, weight["lm_head.weight"], logits);
+        Data logits(DataType::FLOAT32, {hiddenStates.dims[0], params.vocab_size});
+        Linear(hiddenStates, weight["embed_tokens.weight"], logits);
 
         // 采样
         int lastRet = -1;
         if (generationConfig.IsSimpleGreedy()) {
             std::pair <float, int> ret = std::make_pair(-1e9, -1);
-            int base = logits.dims[1] - 1;
+            int base = logits.dims[0] - 1;
             for (int i = 0; i < logits.dims.back(); i++) {
                 ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
             }

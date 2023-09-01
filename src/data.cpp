@@ -34,7 +34,8 @@ namespace xllm{
 
     void Data::Resize(const std::vector<int> &dims) {
         this->dims = dims;
-
+        
+        strides.clear();
         strides.resize(dims.size(), 1);
         for (int i = dims.size() - 2; i >= 0; i--) {
             strides[i] = dims[i + 1] * strides[i + 1];
