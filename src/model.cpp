@@ -253,41 +253,6 @@ namespace xllm {
 
         // 采样
         int lastRet = -1;
-        // typedef struct {
-        //     float value;
-        //     int index;
-        // } IndexedFloat;
-
-        // int compare_indexed_float(const void* a, const void* b) {
-        //     IndexedFloat* indexed_a = (IndexedFloat*)a;
-        //     IndexedFloat* indexed_b = (IndexedFloat*)b;
-        //     return (indexed_b->value > indexed_a->value) ? 1 : ((indexed_b->value < indexed_a->value) ? -1 : 0);
-        // }
-
-        // int sample_top_p(float* probs, int n, float topp) {
-        //     IndexedFloat probs_sort[n];
-        //     for (int i = 0; i < n; i++) {
-        //         probs_sort[i].value = probs[i];
-        //         probs_sort[i].index = i;
-        //     }
-        //     qsort(probs_sort, n, sizeof(IndexedFloat), compare_indexed_float);
-
-        //     float accum = 0.f;
-        //     int p = 0;
-        //     for (; accum<=topp && p < n; p++) {
-        //         accum += probs_sort[p].value;
-        //     }
-
-        //     float r = random_f32() * accum;
-        //     float cdf = 0.0f;
-        //     for (int i = 0; i < p; i++) {
-        //         cdf += probs_sort[i].value;
-        //         if (r < cdf) {
-        //             return probs_sort[i].index;
-        //         }
-        //     }
-        //     return probs_sort[p-1].index; // in case of rounding errors
-        // }
 
         if (generationConfig.IsSimpleGreedy()) {
             std::pair <float, int> ret = std::make_pair(-1e9, -1);
@@ -297,7 +262,46 @@ namespace xllm {
             }
             lastRet = ret.second;
         }
+        
+        // int base = logits.dims[1] - 1;
+        
+        // return sample_top_p(logits.cpuData[base * logits.dims.back()], generationConfig);
+    }
 
-        return lastRet;
+    int LlamaModel::compare_indexed_float(const void* a, const void* b) {
+        IndexedFloat* indexed_a = (IndexedFloat*)a;
+        IndexedFloat* indexed_b = (IndexedFloat*)b;
+        return (indexed_b->value > indexed_a->value) ? 1 : ((indexed_b->value < indexed_a->value) ? -1 : 0);
+    }
+
+    int LlamaModel::sample_top_p(float* probs, const GenerationConfig& generationConfig) {
+        int n = params.vocab_size;
+        IndexedFloat probs_sort[n];
+        for (int i = 0; i < n; i++) {
+            probs_sort[i].value = probs[i];
+            probs_sort[i].index = i;
+        }
+        qsort(probs_sort, n, sizeof(IndexedFloat), compare_indexed_float);
+
+        float accum = 0.f;
+        int p = 0;
+        for (; accum<=generationConfig.top_p && p < n; p++) {
+            accum += probs_sort[p].value;
+        }
+
+        // random float32 in [0,1)
+        std::random_device rd; // 用于生成随机种子的设备
+        std::mt19937 gen(rd()); // Mersenne Twister 伪随机数生成器
+        std::uniform_real_distribution<float> dis(0.0f, 1.0f); // 均匀分布在[0, 1)之间的浮点数
+
+        float r = dis(gen) * accum;
+        float cdf = 0.0f;
+        for (int i = 0; i < p; i++) {
+            cdf += probs_sort[i].value;
+            if (r < cdf) {
+                return probs_sort[i].index;
+            }
+        }
+        return probs_sort[p-1].index; // in case of rounding errors
     }
 }

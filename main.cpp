@@ -11,7 +11,8 @@ struct RunConfig {
 void Usage() {
     std::cout << "Usage:" << std::endl;
     std::cout << "[-h|--help]:                  显示帮助" << std::endl;
-    std::cout << "<-p|--path> <args>:           模型文件的路径" << std::endl;
+    std::cout << "<--weight> <args>:            模型文件的路径" << std::endl;
+    std::cout << "<--token> <args>:             分词器文件的路径" << std::endl;
     std::cout << "<-t|--threads> <args>:        使用的线程数量" << std::endl;
     std::cout << "<-l|--low>:                   使用低内存模式" << std::endl;
     std::cout << "<--top_p> <args>:             采样参数top_p" << std::endl;
@@ -80,11 +81,7 @@ int main(int argc, char **argv) {
             break;
         }
         std::string ret = model->Response(model->MakeInput(history, round, input), [](int index, const char* content) {
-            if (index == 0) {
-                printf("%s", content);
-                fflush(stdout);
-            }
-            if (index > 0) {
+            if (index >= 0) {
                 printf("%s", content);
                 fflush(stdout);
             }

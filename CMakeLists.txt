@@ -18,6 +18,9 @@ target_link_libraries(xllm PUBLIC ${XLLM_LINKED_LIBS})
 add_executable(main main.cpp)
 target_link_libraries(main xllm)
 
+add_executable(benchmark src/benchmark.cpp)
+target_link_libraries(benchmark xllm)
+
 option(DEVELOPMENT OFF)
 if (${DEVELOPMENT})
     message(STATUS "DEVELOPMENT MODE ON")

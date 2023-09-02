@@ -4,6 +4,7 @@
 #include <queue>
 #include <thread>
 #include <mutex>
+#include <random>
 
 #include "utils.h"
 #include "data.h"
@@ -94,5 +95,15 @@ namespace xllm {
         std::vector<float> MakeInput(std::vector<float> &history, int round, const std::string &input); // 根据历史信息和当前输入生成prompt
 
         void MakeHistory(std::vector<float> &history, int round, const std::string &input, const std::string &output); // 根据当前回复更新history
+    
+        typedef struct {
+            float value;
+            int index;
+        } IndexedFloat;
+
+        static int compare_indexed_float(const void* a, const void* b);
+        
+        int sample_top_p(float* probs, const GenerationConfig& generationConfig);
+
     };
 }

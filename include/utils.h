@@ -8,6 +8,7 @@
 #endif
 
 namespace xllm{
+    
     static void ErrorInXLLM(const std::string &error) {
         printf("XLLM Error: %s\n", error.c_str());
         throw error;

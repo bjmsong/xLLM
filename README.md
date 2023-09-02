@@ -14,7 +14,7 @@
 | ---- | ---- | ---- |
 |  FP16   |   4090   |      |
 |  FP16   |    Tesla T4  |      |
-|  FP16   |    Intel Xeon  |      |
+|  FP16   |    Intel Xeon  |  1.3    |
 |  INT8    |  4090    |      |
 |  INT8    |   Tesla T4   |      |
 |  INT8    |   Intel Xeon   |      |
