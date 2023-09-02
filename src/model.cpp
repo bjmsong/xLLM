@@ -30,7 +30,7 @@ namespace xllm {
         sinData.CopyFrom(Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin));
         cosData.CopyFrom(Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos));
         
-        // WarmUp();
+        WarmUp();
     }
 
     std::vector<float> LlamaModel::MakeInput(std::vector<float> &history, int round, const std::string &input) {
@@ -254,18 +254,76 @@ namespace xllm {
         // 采样
         int lastRet = -1;
 
-        if (generationConfig.IsSimpleGreedy()) {
-            std::pair <float, int> ret = std::make_pair(-1e9, -1);
-            int base = logits.dims[1] - 1;
-            for (int i = 0; i < logits.dims.back(); i++) {
-                ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
-            }
-            lastRet = ret.second;
-        }
-        
+        // if (generationConfig.IsSimpleGreedy()) {
+        //     std::pair <float, int> ret = std::make_pair(-1e9, -1);
+        //     int base = logits.dims[1] - 1;
+        //     for (int i = 0; i < logits.dims.back(); i++) {
+        //         ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
+        //     }
+        //     lastRet = ret.second;
+        // }
+
         // int base = logits.dims[1] - 1;
-        
-        // return sample_top_p(logits.cpuData[base * logits.dims.back()], generationConfig);
+        // sample_top_p(logits.cpuData + base * logits.dims.back(), generationConfig);
+
+        lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
+
+        return lastRet; 
+    }
+
+    struct Random {
+        Random () {
+            srand(time(NULL));
+        }
+
+        float randP() {
+            return (float)(rand() % 10001) * 0.0001;
+        }
+    };
+    
+    Random fastllmRandom;
+
+    int LlamaModel::LLMSampling(Data &logits, int outerOffset,
+                    const GenerationConfig &config, const LastTokensUnit &tokens) {
+        int vocabSize = logits.dims.back();
+        float *base = ((float*)logits.cpuData) + outerOffset * vocabSize;
+
+        if (fabs(config.repeat_penalty - 1.0) > 1e-6) {
+            for (int id : tokens.tokenSet) {
+                base[id] = (base[id] < 0 ? base[id] * config.repeat_penalty : base[id] / config.repeat_penalty);
+            }
+        }
+        float invTemp = 1.0f / config.temperature;
+        std::vector <std::pair <float, int> > v;
+        for (int i = 0; i < vocabSize; i++) {
+            v.push_back(std::make_pair(-base[i] * invTemp, i));
+        }
+        int topk = std::min(vocabSize, config.top_k);
+        std::partial_sort(v.begin(), v.begin() + topk, v.end());
+        float psum = 0.0, maxValue = -v.begin()->first;
+        std::vector <float> ps;
+        for (int i = 0; i < topk; i++) {
+            ps.push_back(expf(-v[i].first - maxValue));
+            psum += ps.back();
+        }
+        float curSum = 0.0;
+        for (int i = 0; i < topk; i++) {
+            ps[i] /= psum;
+            curSum += ps[i];
+            if (curSum > config.top_p) {
+                topk = i + 1;
+                break;
+            }
+        }
+        float rnd = fastllmRandom.randP() * curSum;
+        curSum = 0.0;
+        for (int i = 0; i < topk; i++) {
+            curSum += ps[i];
+            if (curSum > rnd || i == topk - 1) {
+                return v[i].second;
+            }
+        }
+        return -1;
     }
 
     int LlamaModel::compare_indexed_float(const void* a, const void* b) {
@@ -274,11 +332,11 @@ namespace xllm {
         return (indexed_b->value > indexed_a->value) ? 1 : ((indexed_b->value < indexed_a->value) ? -1 : 0);
     }
 
-    int LlamaModel::sample_top_p(float* probs, const GenerationConfig& generationConfig) {
+    int LlamaModel::sample_top_p(uint8_t* probs, const GenerationConfig& generationConfig) {
         int n = params.vocab_size;
         IndexedFloat probs_sort[n];
         for (int i = 0; i < n; i++) {
-            probs_sort[i].value = probs[i];
+            probs_sort[i].value = ((float*)probs)[i];
             probs_sort[i].index = i;
         }
         qsort(probs_sort, n, sizeof(IndexedFloat), compare_indexed_float);

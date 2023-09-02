@@ -95,7 +95,10 @@ namespace xllm {
         std::vector<float> MakeInput(std::vector<float> &history, int round, const std::string &input); // 根据历史信息和当前输入生成prompt
 
         void MakeHistory(std::vector<float> &history, int round, const std::string &input, const std::string &output); // 根据当前回复更新history
-    
+
+        int LLMSampling(Data &logits, int outerOffset,
+                    const GenerationConfig &config, const LastTokensUnit &tokens);
+
         typedef struct {
             float value;
             int index;
@@ -103,7 +106,7 @@ namespace xllm {
 
         static int compare_indexed_float(const void* a, const void* b);
         
-        int sample_top_p(float* probs, const GenerationConfig& generationConfig);
+        int sample_top_p(uint8_t* probs, const GenerationConfig& generationConfig);
 
     };
 }
