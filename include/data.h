@@ -1,9 +1,6 @@
 #pragma once
-#include <vector>
 #include <map>
-#include <string>
 #include <cstring>
-#include <iostream>
 #include <cmath>
 
 #include "file.h"

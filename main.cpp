@@ -2,8 +2,8 @@
 #include "xllm.h"
 
 struct RunConfig {
-    std::string weightPath = "/root/autodl-tmp/llama2_7b_chat.bin";  // 模型文件路径
-    std::string tokenPath = "/root/autodl-tmp/tokenizer.bin";
+    std::string weightPath;  // 模型文件路径
+    std::string tokenPath;
     int threads = 4; // 使用的线程数
     bool lowMemMode = false; // 是否使用低内存模式
 };

@@ -38,10 +38,6 @@ TEST(test_tokenizer, Encode3) {
 }
 
 
-// TEST(test_weightmap, LoadFromFile) {
-//     WeightMap weightmap("/root/autodl-tmp/llama2_7b_chat.bin");
-// }
-
 TEST(test_utils, trim) {
     ASSERT_EQ(trim(" abc"), "abc");
     ASSERT_EQ(trim(" abc "), "abc");

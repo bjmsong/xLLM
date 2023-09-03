@@ -229,7 +229,7 @@ namespace xllm {
             MatMul(attenWeights, pastValue, attenOutput);
 
             attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
-            PermuteSelf(attenOutput, axisData);  // 这里为啥要转置
+            PermuteSelf(attenOutput, axisData);
             // {bsz, seqLen, hidden_size}
             attenOutput.Reshape({bsz, seqlen, -1});
 
@@ -266,11 +266,11 @@ namespace xllm {
             for (int i = 0; i < params.vocab_size; i++) {
                 ret.push_back(((float*)logits.cpuData)[base * params.vocab_size + i]/generationConfig.temperature);
             }
-            Data input(DataType::FLOAT32, {1, params.vocab_size}, ret);
-            Data output(DataType::FLOAT32, {1, params.vocab_size});
-            SoftMax(input, output, -1);
-            lastRet = sample_top_p(output.cpuData, generationConfig);
-            // lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
+            // Data input(DataType::FLOAT32, {1, params.vocab_size}, ret);
+            // Data output(DataType::FLOAT32, {1, params.vocab_size});
+            // SoftMax(input, output, -1);
+            // lastRet = sample_top_p(output.cpuData, generationConfig);
+            lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
         }
 
         return lastRet; 

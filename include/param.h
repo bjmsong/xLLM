@@ -44,7 +44,7 @@ namespace xllm {
         int vocab_size = 32000;
         int hidden_size = 4096;
         const float scale_attn = sqrt(head_dim);
-        int rotary_dim = 128;  // 官方代码中没有找到
+        int rotary_dim = 128;
         int max_positions = 32768;  // 32K
         int intermediate_size = 11008;
     };
