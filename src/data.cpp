@@ -165,6 +165,7 @@ namespace xllm{
             AssertInXLLM(dims[i] == -1 || dims[i] >= this->dims[i], "Expansion error: real size should <= expansion size.\n");
         }
 
+        uint8_t *old = this->cpuData;
         MallocSpace(expandBytes);
 
         // 要扩张哪一个维度
@@ -177,7 +178,6 @@ namespace xllm{
         }
 
         int inputStride = this->Count(axis);
-        uint8_t *old = this->cpuData;
         // 把原来的数据拷贝到新的空间
         int outer = this->counts / inputStride;
         for (int o = 0; o < outer; o++) {

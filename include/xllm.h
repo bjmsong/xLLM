@@ -18,13 +18,13 @@ namespace xllm {
         float repeat_penalty = 1.0f; // 重复惩罚系数，1.0代表不惩罚
         int top_k = 1; // top_k采样
         float top_p = 0.9; // top_p采样
-        float temperature = 1.0; // 温度参数，一般在0.1 ~ 1.0之间，设大这个参数可以带来结果的多样性
+        float temperature = 0.6; // 温度参数，一般在0.1 ~ 1.0之间，设大这个参数可以带来结果的多样性
 
         bool IsSimpleGreedy() const {
             if (fabs(repeat_penalty - 1) > 1e-8) {
                 return false;
             }
-            if (top_k > 1) {
+            if (top_p < 1) {
                 return false;
             }
             return true;

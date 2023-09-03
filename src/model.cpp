@@ -253,20 +253,25 @@ namespace xllm {
 
         // 采样
         int lastRet = -1;
+        int base = logits.dims[1] - 1;
 
-        // if (generationConfig.IsSimpleGreedy()) {
-        //     std::pair <float, int> ret = std::make_pair(-1e9, -1);
-        //     int base = logits.dims[1] - 1;
-        //     for (int i = 0; i < logits.dims.back(); i++) {
-        //         ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
-        //     }
-        //     lastRet = ret.second;
-        // }
-
-        // int base = logits.dims[1] - 1;
-        // sample_top_p(logits.cpuData + base * logits.dims.back(), generationConfig);
-
-        lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
+        if (generationConfig.IsSimpleGreedy()) {
+            std::pair <float, int> ret = std::make_pair(-1e9, -1);
+            for (int i = 0; i < logits.dims.back(); i++) {
+                ret = max(ret, std::make_pair(((float*)logits.cpuData)[base * logits.dims.back() + i], i));
+            }
+            lastRet = ret.second;
+        } else {
+            std::vector<float> ret;
+            for (int i = 0; i < params.vocab_size; i++) {
+                ret.push_back(((float*)logits.cpuData)[base * params.vocab_size + i]/generationConfig.temperature);
+            }
+            Data input(DataType::FLOAT32, {1, params.vocab_size}, ret);
+            Data output(DataType::FLOAT32, {1, params.vocab_size});
+            SoftMax(input, output, -1);
+            lastRet = sample_top_p(output.cpuData, generationConfig);
+            // lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
+        }
 
         return lastRet; 
     }
