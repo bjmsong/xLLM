@@ -186,5 +186,67 @@ namespace xllm{
                     inputStride * unitSize);
         }
         delete[] old;
+    }
+
+    void Data::CalcWeightSum() {
+        if (this->weightSum.size() > 0) {
+            return;
+        }
+        int n = this->dims[0], m = this->dims[1];
+        if (this->dataType == DataType::INT8) {
+            weightSum.resize(n);
+            for (int i = 0; i < n; i++) {
+                int j = 0;
+#ifdef __AVX__
+                __m256i acc = _mm256_setzero_si256();
+                const __m256i ones = _mm256_set1_epi16(1);
+                for (; j + 31 < m; j += 32) {
+                    __m256i ax = _mm256_loadu_si256((const __m256i *) (cpuData + i * m + j));
+                    __m256i mx0 = _mm256_cvtepu8_epi16(_mm256_extractf128_si256(ax, 0));
+                    __m256i mx1 = _mm256_cvtepu8_epi16(_mm256_extractf128_si256(ax, 1));
+                    acc = _mm256_add_epi32(acc, _mm256_madd_epi16(mx0, ones));
+                    acc = _mm256_add_epi32(acc, _mm256_madd_epi16(mx1, ones));
+                }
+                weightSum[i] += I32sum(acc);
+#endif
+                for (; j < m; j++) {
+                    weightSum[i] += cpuData[i * m + j];
+                }
+            }
+        } else if (this->dataType == DataType::INT4 || this->dataType == DataType::INT4_NOZERO) {
+            weightSum.resize(n);
+            for (int i = 0; i < n; i++) {
+                int j = 0;
+#ifdef __AVX__
+	            __m256i acc = _mm256_setzero_si256();
+	            const __m256i lowMask = _mm256_set1_epi8(0xf);
+	            const __m256i ones = _mm256_set1_epi16(1);
+	            for (; j + 31 < m; j += 32) {
+		            __m128i orix = _mm_loadu_si128((const __m128i *) (cpuData + (i * m + j) / 2));
+		            __m256i bytex = _mm256_set_m128i(_mm_srli_epi16(orix, 4), orix);
+		            __m256i bx = _mm256_and_si256(lowMask, bytex);
+
+		            __m256i mx0 = _mm256_cvtepu8_epi16(_mm256_extractf128_si256(bx, 0));
+		            __m256i mx1 = _mm256_cvtepu8_epi16(_mm256_extractf128_si256(bx, 1));
+
+		            acc = _mm256_add_epi32(acc, _mm256_madd_epi16(mx0, ones));
+		            acc = _mm256_add_epi32(acc, _mm256_madd_epi16(mx1, ones));
+	            }
+	            weightSum[i] += I32sum(acc);
+#endif
+                for (; j + 1 < m; j += 2) {
+	                int id = (i * m + j) / 2;
+	                weightSum[i] += (cpuData[id] & 0xF) + (cpuData[id] >> 4);
+                }
+                for (; j < m; j++) {
+                    int id = (i * m + j) / 2;
+                    if ((i * m + j) % 2) {
+                        weightSum[i] += (cpuData[id] & 0xF);
+                    } else {
+                        weightSum[i] += (cpuData[id] >> 4);
+                    }
+                }
+            }
+        }
     }    
 }

@@ -31,9 +31,12 @@ namespace xllm {
 
         WeightMap(const std::string &fileName);
 
-        void SaveLowBitModel(const std::string &fileName, int bit); // 存储成量化模型, bit = 0代表直接存
-
         Data &operator [] (const std::string &key);
+
+        static void PerChannelQuantizationMultiThread(int st, int end, int m,
+                                           float *f, uint8_t *u8, LowBitConfig *configs, int bit);
+
+        void SaveLowBitModel(const std::string &fileName, int bit); // 存储成量化模型, bit = 0代表直接存
     };
 
     struct ModelArgs{

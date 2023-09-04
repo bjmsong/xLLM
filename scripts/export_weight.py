@@ -142,4 +142,5 @@ if __name__ == "__main__":
     model = model.eval()
 
     exportPath = sys.argv[1]
-    tofile(exportPath, model)
+    dtype = sys.argv[2]
+    tofile(exportPath, model, dtype)

@@ -1,6 +1,8 @@
 ## 介绍
 
-练习项目，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
+![running](./video/.mp4)(压缩时长！1M左右最好)
+
+基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
 - 支持llama2-7B
 - 支持CPU加速
 - 支持量化: FP16，INT8
@@ -47,7 +49,12 @@ make -j4
 ```
 
 
-5. 量化
+## 量化
+1. 导出INT8模型
+./quant --weight llama2_7b_chat.bin -o llama2_7b_chat_int8.bin -b 8
+
+2. 推理INT8模型
+./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
 
 
 ## 单元测试

@@ -96,7 +96,7 @@ namespace xllm {
 
         void MakeHistory(std::vector<float> &history, int round, const std::string &input, const std::string &output); // 根据当前回复更新history
 
-        int LLMSampling(Data &logits, int outerOffset,
+        int TOPKSampling(Data &logits, int outerOffset,
                     const GenerationConfig &config, const LastTokensUnit &tokens);
 
         typedef struct {

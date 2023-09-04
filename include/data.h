@@ -10,16 +10,85 @@
 namespace xllm{
 
 enum DataType {
-    FLOAT32 = 0, BFLOAT16 = 1, INT8 = 3, INT4_NOZERO = 8, FLOAT16 = 7
+    FLOAT32 = 0, BFLOAT16 = 1, INT8 = 3, INT4 = 4, INT4_NOZERO = 8, FLOAT16 = 7
 };
 
 enum WeightType {
     NONE = 0, LINEAR = 1, EMBEDDING = 2
 };
 
+struct LowBitConfig {
+    int bit;
+    float min, max;   // 浮点数的最小值、最大值
+    uint8_t zeroPoint;
+    float scale;
+    int type; // 0: 非对称量化 1: 对称量化
+
+    LowBitConfig(float min, float max, int bit, int type) {
+        this->min = min;
+        this->max = max;
+        this->bit = bit;
+        this->type = type;
+        Reset();
+    }
+
+    LowBitConfig () {
+
+    }
+
+    void Reset() {
+        /*if (type == 1) {
+            this->scale = (max - min) / 15.0;
+            return;
+        }*/
+        /*if (type == 1) {
+            this->scale = std::max(fabs(max), fabs(min)) / 7.0;
+            this->min = this->scale * (-7.0);
+            return;
+        }*/
+        min = std::min(min, 0.f);
+        max = std::max(max, 0.f);
+
+        const float qmin = 0;
+        const float qmax = (1 << bit) - 1;
+        scale = (max - min) / (qmax - qmin);
+        const float initial_zero_point = qmin - min / scale;
+        zeroPoint = 0;
+        if (initial_zero_point < qmin) {
+            zeroPoint = qmin;
+        } else if (initial_zero_point > qmax) {
+            zeroPoint = qmax;
+        } else {
+            zeroPoint = static_cast<uint8_t>(std::round(initial_zero_point));
+        }
+
+        if (type == 1) {
+            this->min = -this->scale * zeroPoint;
+            return;
+        }
+    }
+
+    uint8_t quantization(const float &realNumber) const {
+        if (type == 0) {
+            return (uint8_t) (std::min((double) ((1 << bit) - 1),
+                                        std::max(realNumber / scale + zeroPoint + 0.5, 0.0)));
+        } else {
+            return (uint8_t) (std::max(0.f, std::min(15.f, (realNumber - min) / scale + 0.5f)));
+        }
+    }
+
+    float invQuantization(const uint8_t &qNumber) const {
+        if (type == 0) {
+            return (scale * ((float) qNumber - (float) zeroPoint));
+        } else {
+            return min + scale * qNumber;
+        }
+    }
+};
+
 class Data {
     public:
-        WeightType weightType = WeightType::NONE; // 权重类型，NONE代表非权重（或未知权重）
+        WeightType weightType = WeightType::NONE; // 权重类型，NONE代表非Embedding/Linear
 
         DataType dataType = DataType::FLOAT32; // 数据类型
         int unitSize = 4;         // dataType占几个字节
@@ -41,6 +110,13 @@ class Data {
         uint64_t expandBytes = 0; // 字节
 
         uint8_t *cpuData = nullptr; // 数据指针
+
+        // 量化相关的参数
+        int perChannelAxis = -1; // 沿哪个轴分通道量化，-1代表没有分通道
+        std::vector <LowBitConfig> perChannelsConfigs; // perChannelsConfigs[i]代表第i个通道的min, max; 如果没有分通道，perChannelsConfigs[0]代表全局min, max
+        std::vector <float> scales;
+        std::vector <int> zeros;
+        std::vector <int> weightSum; // 作为权重时，有时候需要存一些和加速计算
 
         Data() {};
         Data (DataType type);

@@ -270,7 +270,7 @@ namespace xllm {
             // Data output(DataType::FLOAT32, {1, params.vocab_size});
             // SoftMax(input, output, -1);
             // lastRet = sample_top_p(output.cpuData, generationConfig);
-            lastRet = LLMSampling(logits, base - 1, generationConfig, lastTokens.units[0]);
+            lastRet = TOPKSampling(logits, base - 1, generationConfig, lastTokens.units[0]);
         }
 
         return lastRet; 
@@ -288,8 +288,7 @@ namespace xllm {
     
     Random fastllmRandom;
 
-    // TOP-K采样
-    int LlamaModel::LLMSampling(Data &logits, int outerOffset,
+    int LlamaModel::TOPKSampling(Data &logits, int outerOffset,
                     const GenerationConfig &config, const LastTokensUnit &tokens) {
         int vocabSize = logits.dims.back();
         float *base = ((float*)logits.cpuData) + outerOffset * vocabSize;
