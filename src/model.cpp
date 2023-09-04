@@ -139,8 +139,6 @@ namespace xllm {
         
         int bsz = 1, seqlen = inputIds.dims[1];
         Data hiddenStates(DataType::FLOAT32, {bsz, seqlen, params.embed_dim});
-        Embedding(inputIds, weight["model.embed_tokens.weight"], hiddenStates);
-
         Data attenInput(DataType::FLOAT32, hiddenStates.dims);
         Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
         Data attenOutput(DataType::FLOAT32, {bsz, params.num_attention_heads, bsz* seqlen, params.hidden_size/params.num_attention_heads});
@@ -148,6 +146,8 @@ namespace xllm {
         Data w1(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
         Data w3(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
         Data w2(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
+
+        Embedding(inputIds, weight["model.embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < params.block_cnt; i++) {
             RMSNorm(hiddenStates, weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
@@ -262,15 +262,15 @@ namespace xllm {
             }
             lastRet = ret.second;
         } else {
-            std::vector<float> ret;
-            for (int i = 0; i < params.vocab_size; i++) {
-                ret.push_back(((float*)logits.cpuData)[base * params.vocab_size + i]/generationConfig.temperature);
-            }
+            // std::vector<float> ret;
+            // for (int i = 0; i < params.vocab_size; i++) {
+            //     ret.push_back(((float*)logits.cpuData)[base * params.vocab_size + i]/generationConfig.temperature);
+            // }
             // Data input(DataType::FLOAT32, {1, params.vocab_size}, ret);
             // Data output(DataType::FLOAT32, {1, params.vocab_size});
             // SoftMax(input, output, -1);
             // lastRet = sample_top_p(output.cpuData, generationConfig);
-            lastRet = LLMSampling(logits, logits.dims[1] - 1, generationConfig, lastTokens.units[0]);
+            lastRet = LLMSampling(logits, base - 1, generationConfig, lastTokens.units[0]);
         }
 
         return lastRet; 
@@ -288,16 +288,19 @@ namespace xllm {
     
     Random fastllmRandom;
 
+    // TOP-K采样
     int LlamaModel::LLMSampling(Data &logits, int outerOffset,
                     const GenerationConfig &config, const LastTokensUnit &tokens) {
         int vocabSize = logits.dims.back();
         float *base = ((float*)logits.cpuData) + outerOffset * vocabSize;
 
+        // 降低重复token的输出概率
         if (fabs(config.repeat_penalty - 1.0) > 1e-6) {
             for (int id : tokens.tokenSet) {
                 base[id] = (base[id] < 0 ? base[id] * config.repeat_penalty : base[id] / config.repeat_penalty);
             }
         }
+
         float invTemp = 1.0f / config.temperature;
         std::vector <std::pair <float, int> > v;
         for (int i = 0; i < vocabSize; i++) {

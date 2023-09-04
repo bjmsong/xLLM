@@ -24,7 +24,7 @@ namespace xllm {
             if (fabs(repeat_penalty - 1) > 1e-8) {
                 return false;
             }
-            if (top_p < 1) {
+            if (top_k > 1) {
                 return false;
             }
             return true;

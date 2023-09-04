@@ -109,7 +109,9 @@ namespace xllm{
     // inputData(float32) * weightData(float16) = outputData(float32)
     void Float16LinearPart(float *inputData, uint16_t *weightData, float *biasData, float *outputData,
                         int n, int m, int k, int st, int end) {
+        // 遍历行
         for (int i = 0; i < n; i++) {
+            // 遍历列
             for (int j = st; j < end; j++) {
                 float now = biasData ? biasData[j] : 0.0f;
                 int l = 0;
@@ -148,7 +150,7 @@ namespace xllm{
     }
 
 
-    // 多维矩阵*二维矩阵乘法：input(n,m) * weight(k,m) + bias = output(n,k)
+    // 多维矩阵（可以转换为二维矩阵）*二维矩阵乘法：input(n,m) * weight(k,m) + bias = output(n,k)
     void Linear(const Data &input, Data &weight, Data &output) {
         output.Allocate(0);
         // auto st = std::chrono::system_clock::now();
@@ -166,7 +168,7 @@ namespace xllm{
                 float *biasData = bias.dims.size() > 0 ? (float *) bias.cpuData : nullptr;
 
                 int threadNum = GetThreads();
-                int per = k / threadNum;
+                int per = k / threadNum;    // 一个线程负责per列的计算
                 int cur = 0;
                 auto pool = GetPool();
                 std::vector<std::future<void> > futures;
@@ -485,7 +487,6 @@ namespace xllm{
 
     void MatMulTransBSingle(float *input0Base, float *input1Base, float *outputBase,
                                 int input0Spatial, int input1Spatial, int outputSpatial,
-                                int input0Stride, int input1Stride,
                                 int n, int m, int k, float alpha, int st, int end) {
             for (int b = st; b < end; b++) {
                 float *input0Data = input0Base + b * input0Spatial;
@@ -498,14 +499,14 @@ namespace xllm{
     #if defined(__AVX__)
                         __m256 vsum = _mm256_set1_ps(0.0f);
                         for (; l + 7 < m; l += 8) {
-                            __m256 vx = _mm256_loadu_ps((const float *) (input0Data + i * input0Stride + l));
-                            __m256 vy = _mm256_loadu_ps((const float *) (input1Data + j * input1Stride + l));
+                            __m256 vx = _mm256_loadu_ps((const float *) (input0Data + i * m + l));
+                            __m256 vy = _mm256_loadu_ps((const float *) (input1Data + j * m + l));
                             vsum = _mm256_add_ps(vsum, _mm256_mul_ps(vx, vy));
                         }
                         now += Floatsum(vsum);
     #endif
                         for (; l < m; l++) {
-                            now += input0Data[i * input0Stride + l] * input1Data[j * input1Stride + l];
+                            now += input0Data[i * m + l] * input1Data[j * m + l];
                         }
                         outputData[i * k + j] = now * alpha;
                     }
@@ -514,15 +515,17 @@ namespace xllm{
         }
 
     // 三维矩阵乘法: input0(batch, n, m) * input1(batch, k, m)^T = output(batch, n, k)
-    // TODO: 可以跟Linear整合吗？
+    // input1内存不连续，不同batch之间的矩阵乘法要分开计算
     void MatMulTransB(Data &input0, Data &input1, Data &output, float alpha) {
         output.Allocate();
 
-        int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];
-        int input0Stride = input0.strides[input0.dims.size() - 2];
-        int input1Stride = input1.strides[input1.dims.size() - 2];
-        int outputSpatial = output.Count(output.dims.size() - 2);
+        // 一个batch有多少个数
+        int input0Spatial = input0.Count(input0.dims.size() - 2);   // n*m
+        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];   // m*expandDims[1]
+        int outputSpatial = output.Count(output.dims.size() - 2);    // n*k
+
+        // int input0Stride = input0.strides[input0.dims.size() - 2];     // m
+        // int input1Stride = input1.strides[input1.dims.size() - 2];     // m
 
         int batch = input0.counts / input0Spatial;
         int n = input0.dims[input0.dims.size() - 2];
@@ -533,8 +536,8 @@ namespace xllm{
         if (batch * n * m * k < 64 * 4096) {
             threadNum = 1;
         }
-        threadNum = std::min(threadNum, 4);
-        int per = batch / threadNum;
+        // threadNum = std::min(threadNum, 4);
+        int per = batch / threadNum;  // 一个线程负责per个batch的计算
         int cur = 0;
         auto pool = GetPool();
         std::vector <std::future <void> > futures;
@@ -544,13 +547,12 @@ namespace xllm{
                 futures.push_back(pool->enqueue(MatMulTransBSingle,
                                                (float *) input0.cpuData, (float *) input1.cpuData,
                                                (float *) output.cpuData,
-                                               input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                                               input0Spatial, input1Spatial, outputSpatial,
                                                n, m, k, alpha, cur, end));
                 cur = end;
             }
             MatMulTransBSingle((float *) input0.cpuData, (float *) input1.cpuData, (float *) output.cpuData,
-                               input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
-                               n, m, k, alpha, cur, batch);
+                               input0Spatial, input1Spatial, outputSpatial,n, m, k, alpha, cur, batch);
         } 
         for (int i = 0; i < futures.size(); i++) {
             futures[i].get();
@@ -687,16 +689,18 @@ namespace xllm{
 
     void MatMulSingle(float *input0Base, float *input1Base, float *outputBase,
                       int input0Spatial, int input1Spatial, int outputSpatial,
-                      int input0Stride, int input1Stride,
                       int n, int m, int k, float alpha, int st, int end) {
         for (int b = st; b < end; b++) {
             float *input0Data = input0Base + b * input0Spatial;
             float *input1Data = input1Base + b * input1Spatial;
             float *outputData = outputBase + b * outputSpatial;
             std::fill(outputData, outputData + n * k, 0.0f);
+            // 一次只计算一个数，不需要SIMD
+            // 遍历input0的行
             for (int i = 0; i < n; i++) {
+                // 遍历input1的行
                 for (int j = 0; j < m; j++) {
-                    float now = input0Data[i * input0Stride + j] * alpha;
+                    float now = input0Data[i * m + j] * alpha;
                     for (int l = 0; l < k; l++) {
                         outputData[i * k + l] += (now * input1Data[j * k + l]);
                     }
@@ -705,28 +709,33 @@ namespace xllm{
         }
     }
 
-    // TODO: 跟Linear()进行整合
-    // input0(n, m) * input1(m,k) = output(n,k)
+    // input0: {1, num_attention_heads, bsz * seqlen, k_seqlen}
+    // input1:{num_attention_heads, k_seqlen, hidden_size/num_attention_heads}
+    // output: {1, num_attention_heads, bsz * seqlen, hidden_size/num_attention_heads}
+    // input0(batch,n,m) * input1(batch,m,k) = output(batch,n,k)
+    // input1内存不连续，并且需要转置
+    // 如果input1先permute，就跟MatMulTransB一样了
     void MatMul(Data &input0, Data &input1, Data &output) {
         output.Allocate();
 
-        int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];
-        int input0Stride = input0.strides[input0.dims.size() - 2];
-        int input1Stride = input1.strides[input1.dims.size() - 2];
+        int input0Spatial = input0.Count(input0.dims.size() - 2);     // n*m
+        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];  // k*expandDims[1]
+        int outputSpatial = output.Count(output.dims.size() - 2);    // n*k
+
+        // int input0Stride = input0.strides[input0.dims.size() - 2];   // m
+        // int input1Stride = input1.strides[input1.dims.size() - 2];   // k
+
         int n = input0.dims[input0.dims.size() - 2];
         int m = input0.dims.back();
         int k = input1.dims.back();
         int batch = input0.Count(0) / input0Spatial;
 
-        int outputSpatial = output.Count(output.dims.size() - 2);
         int threadNum = GetThreads();
         if (batch * n * m * k < 64 * 4096) {
             threadNum = 1;
         }
-        threadNum = std::min(threadNum, 4);
-        // TODO: SIMD优化
-        int per = batch / threadNum;
+        // threadNum = std::min(threadNum, 4);
+        int per = batch / threadNum;   // 一个线程负责per个batch
         int cur = 0;
         auto pool = GetPool();
         std::vector <std::future <void> > futures;
@@ -737,13 +746,12 @@ namespace xllm{
                 futures.push_back(pool->enqueue(MatMulSingle,
                                                (float *) input0.cpuData, (float *) input1.cpuData,
                                                (float *) output.cpuData,
-                                               input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                                               input0Spatial, input1Spatial, outputSpatial,
                                                n, m, k, alpha, cur, end));
                 cur = end;
             }
             MatMulSingle((float *) input0.cpuData, (float *) input1.cpuData, (float *) output.cpuData,
-                         input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
-                         n, m, k, alpha, cur, batch);
+                         input0Spatial, input1Spatial, outputSpatial, n, m, k, alpha, cur, batch);
         } 
         for (int i = 0; i < futures.size(); i++) {
             futures[i].get();
