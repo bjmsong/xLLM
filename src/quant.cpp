@@ -41,7 +41,7 @@ void ParseArgs(int argc, char **argv, QuantConfig &config) {
 int main(int argc, char **argv) {
     QuantConfig config;
     ParseArgs(argc, argv, config);
-    xllm::WeightMap weight(config.weightPath);;
+    xllm::WeightMap weight(config.weightPath);
     weight.SaveLowBitModel(config.output, config.bits);
     return 0;
 }

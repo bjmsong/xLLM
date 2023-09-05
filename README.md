@@ -1,15 +1,16 @@
 ## 介绍
 
-![running](./video/.mp4)(压缩时长！1M左右最好)
+![running](./video/.mp4)(压缩时长！1M左右最好, 录屏时把shell字体放大)
 
 基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
 - 支持llama2-7B
-- 支持CPU加速
+- 支持SIMD加速
 - 支持量化: FP16，INT8
 - 支持BPE
 - 无第三方依赖
-- 代码量~3k行，代码结构简单
+- 代码量<4k行，代码结构简单
 - 支持Linux
+- 单元测试
 
 
 |      |   硬件   |   推理速度(tokens/s)   |
