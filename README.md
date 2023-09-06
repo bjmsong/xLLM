@@ -58,6 +58,30 @@ make -j4
 ./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
 
 
+## 内存占用(以llama2-7B为例)
+| 参数名                              | 缩写 | 参数值 |
+| ----------------------------------- | ---- | ------ |
+| vocab_size                          | v    | 32000  |
+| batch_size                          | b    |        |
+| input sequence length               | s    | 512    |
+| output sequence length              | n    | 512    |
+| hidden dimension of the transformer | h1   | 4096   |
+| hidden dimension of the second MLP  | h2   | 11008  |
+| total number of transformer blocks  | L    | 32     |
+
+|            |                | 参数量                        | 数据类型 | 内存（G） |
+| ---------- | -------------- | ----------------------------- | -------- | --------- |
+| Embedding  |                | vh1                           | BF16     | 0.2       |
+| 模型权重   |                | (4h1h1+2h1 + 3h1h2)L + vh1+h1 | FP16     | 12.2      |
+|            | self-attention | (4h1h1+h1)L                   | FP16     | 4         |
+|            | MLP            | (3h1h2+h1)L                   | FP16     | 8         |
+|            | head           | vh1+h1                        | FP16     | 0.2       |
+| KV cache   | batch_size=64  | b(s+n)h1\*2\*L                | FP32     | 64        |
+|            | batch_size=1   | b(s+n)h1\*2\*L                | FP32     | 1         |
+| 中间激活值 | 峰值           | 6bsh1+2bsh2+bs(s+n)           | FP32     | 5.8       |
+|            | 正常值         | 6bh1+2bh2+b(1+n)              | FP32     | 0.01      |
+
+
 ## 单元测试
 
 ```bash

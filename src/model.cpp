@@ -141,7 +141,7 @@ namespace xllm {
         Data hiddenStates(DataType::FLOAT32, {bsz, seqlen, params.embed_dim});
         Data attenInput(DataType::FLOAT32, hiddenStates.dims);
         Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
-        Data attenOutput(DataType::FLOAT32, {bsz, params.num_attention_heads, bsz* seqlen, params.hidden_size/params.num_attention_heads});
+        Data attenOutput(DataType::FLOAT32, {bsz, params.num_attention_heads, seqlen, params.hidden_size/params.num_attention_heads});
         Data attenLastOutput(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
         Data w1(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
         Data w3(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
