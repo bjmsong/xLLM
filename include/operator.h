@@ -33,4 +33,6 @@ namespace xllm{
     void MulTo(Data &input0, Data &input1);
 
     void Silu(Data &input, Data &output);
+
+    void MultiplyMultiThread(uint8_t *a, uint8_t *b, int32_t *c, int n, int m, int k, int threadNum);
 }

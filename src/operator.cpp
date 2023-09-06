@@ -352,6 +352,7 @@ namespace xllm{
                 float *outputData = (float *) output.cpuData;
                 weight.CalcWeightSum();
 
+                // 按行量化input: fp32->int8
                 std::vector<LowBitConfig> inputConfigs;
                 for (int i = 0; i < n; i++) {
                     float minValue = 1e9, maxValue = -1e9;
@@ -374,7 +375,7 @@ namespace xllm{
 
                 MultiplyMultiThread(uinput.data(), weightData, (int32_t *) outputData, n, m, k, GetThreads());
                 for (int i = 0; i < n; i++) {
-                    uint32_t inputSum = 0;
+                    uint32_t inputSum = 0;  // 每一行的和
                     for (int j = 0; j < m; j++) {
 #ifdef __AVX2__
                         inputSum += uinput[i * m + j] ^ 128;

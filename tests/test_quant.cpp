@@ -7,15 +7,14 @@
 using namespace xllm;
 
 
-xllm::WeightMap weight("/root/autodl-tmp/llama2_7b_chat.bin");
-xllm::WeightMap weightQuant("/root/autodl-tmp/llama2_7b_chat_int8.bin");
+TEST(test_quant, quant_linear) {
 
-TEST(test_quant, linear) {
-    Data& lmHead = weight.weight["lm_head.weight"];
-    Data& lmHeadInt8 = weightQuant.weight["lm_head.weight"];
-
-    // Data& lmHead = weight.weight["model.layers.0.self_attn.q_proj.weight"];
-    // Data& lmHeadInt8 = weightInt8.weight["model.layers.0.self_attn.q_proj.weight"];
+    xllm::WeightMap weight("/root/autodl-tmp/llama2_7b_chat.bin");
+    xllm::WeightMap weightQuant("/root/autodl-tmp/llama2_7b_chat_int8.bin");
+    
+    std::string weightName = "model.layers.0.self_attn.q_proj.weight";
+    Data& lmHead = weight[weightName];
+    Data& lmHeadInt8 = weightQuant[weightName];
 
     ASSERT_EQ(lmHead.counts, lmHeadInt8.counts);
     ASSERT_EQ(lmHead.dims[0], lmHeadInt8.dims[0]);
@@ -48,10 +47,14 @@ TEST(test_quant, linear) {
 }
 
 
-TEST(test_quant, embedding) {
+TEST(test_quant, quant_embedding) {
+
+xllm::WeightMap weight("/root/autodl-tmp/llama2_7b_chat.bin");
+xllm::WeightMap weightQuant("/root/autodl-tmp/llama2_7b_chat_int8.bin");
+
     std::string weightname = "model.embed_tokens.weight";
-    Data& emb = weight.weight[weightname];
-    Data& embQuant = weightQuant.weight[weightname];
+    Data& emb = weight[weightname];
+    Data& embQuant = weightQuant[weightname];
 
     ASSERT_EQ(emb.counts, embQuant.counts);
     ASSERT_EQ(emb.dims[0], embQuant.dims[0]);
@@ -63,4 +66,30 @@ TEST(test_quant, embedding) {
     ASSERT_EQ(emb.cpuData[3], embQuant.cpuData[1]);
     ASSERT_EQ(emb.cpuData[6], embQuant.cpuData[2]);
     ASSERT_EQ(emb.cpuData[7], embQuant.cpuData[3]);
+}
+
+TEST(test_quant, linear) {
+
+xllm::PrintInstructionInfo();
+xllm::WeightMap weight("/root/autodl-tmp/llama2_7b_chat.bin");
+xllm::WeightMap weightQuant("/root/autodl-tmp/llama2_7b_chat_int8.bin");
+
+    Data tokens = Data(DataType::FLOAT32, {1, 5}, {1,2,3,4,5});
+    Data hiddenStates(DataType::FLOAT32, {1, tokens.dims[1], 4096});
+    Data attenInput(DataType::FLOAT32, hiddenStates.dims);
+    Data q(DataType::FLOAT32, hiddenStates.dims);
+    std::string qWeightName = "model.layers.0.self_attn.q_proj.weight";
+
+    Embedding(tokens, weight["model.embed_tokens.weight"], hiddenStates);
+    RMSNorm(hiddenStates, weight["model.layers.0.input_layernorm.weight"],attenInput, 1e-6);
+    Linear(attenInput, weight[qWeightName], q);
+
+    Data hiddenStatesQuant(DataType::FLOAT32, {1, tokens.dims[1], 4096});
+    Data attenInputQuant(DataType::FLOAT32, hiddenStatesQuant.dims);
+    Data qQuant(DataType::FLOAT32, hiddenStatesQuant.dims);
+    Embedding(tokens, weightQuant["model.embed_tokens.weight"], hiddenStatesQuant);
+    RMSNorm(hiddenStatesQuant, weightQuant["model.layers.0.input_layernorm.weight"],attenInputQuant, 1e-6);
+    Linear(attenInputQuant, weightQuant[qWeightName], qQuant);
+
+    ASSERT_EQ(q.counts, qQuant.counts);
 }

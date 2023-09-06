@@ -1,19 +1,19 @@
-// {
-//     // 使用 IntelliSense 了解相关属性。 
-//     // 悬停以查看现有属性的描述。
-//     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
-//     "version": "0.2.0",
-//     "configurations": [
-//         {
-//             "type": "lldb",
-//             "request": "launch",
-//             "name": "Debug",
-//             "cwd": "${workspaceFolder}",
-//             "program": "${workspaceFolder}/build/tests/unittest",
-//             "args": ["--gtest_filter=test_quant.embedding"],
-//         }
-//     ]
-// }
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/build/tests/unittest",
+            "args": ["--gtest_filter=test_data.CalcWeightSum2"],
+        }
+    ]
+}
 
 
 // {
@@ -34,23 +34,23 @@
 //     ]
 // }
 
-{
-    // 使用 IntelliSense 了解相关属性。 
-    // 悬停以查看现有属性的描述。
-    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug",
-            "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}/build/main",
-            "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat_int8.bin", 
-            "--token","/root/autodl-tmp/tokenizer.bin", "--threads", "16"],
-        }
-    ]
-}
+// {
+//     // 使用 IntelliSense 了解相关属性。 
+//     // 悬停以查看现有属性的描述。
+//     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+//     "version": "0.2.0",
+//     "configurations": [
+//         {
+//             "type": "lldb",
+//             "request": "launch",
+//             "name": "Debug",
+//             "cwd": "${workspaceFolder}",
+//             "program": "${workspaceFolder}/build/main",
+//             "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat_int8.bin", 
+//             "--token","/root/autodl-tmp/tokenizer.bin", "--threads", "16"],
+//         }
+//     ]
+// }
 
 // {
 //     "version": "0.2.0",

@@ -233,6 +233,28 @@ TEST(test_operator, SoftMax) {
     ASSERT_EQ(((float*)input.cpuData)[5], 0);
 }
 
+// 这个测试需要关闭avx
+TEST(test_operator, MultiplyMultiThread) {
+    
+    int n = 2, m = 3, k = 4;
+    std::vector<uint8_t> uinput(n*m);
+    for (int i = 0; i < n*m; i++) {
+        uinput[i] = i+1;
+    } 
+    std::vector<uint8_t> weight{1, 5,9, 2,6,10,3,7,11,4,8,12};
+    Data output(DataType::FLOAT32, {n,k});
+    output.Allocate();
+    MultiplyMultiThread(uinput.data(), weight.data(), (int32_t *)output.cpuData, n, m, k, 1);
+    ASSERT_EQ(((int32_t*)output.cpuData)[0], 38);
+    ASSERT_EQ(((int32_t*)output.cpuData)[1], 44);
+    ASSERT_EQ(((int32_t*)output.cpuData)[2], 50);
+    ASSERT_EQ(((int32_t*)output.cpuData)[3], 56);
+    ASSERT_EQ(((int32_t*)output.cpuData)[4], 83);
+    ASSERT_EQ(((int32_t*)output.cpuData)[5], 98);
+    ASSERT_EQ(((int32_t*)output.cpuData)[6], 113);
+    ASSERT_EQ(((int32_t*)output.cpuData)[7], 128);
+}
+
 TEST(test_operator, MatMul) {
     
 }
