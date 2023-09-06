@@ -44,6 +44,9 @@ TEST(test_quant, quant_linear) {
     uint8_t valInt8 = ((uint8_t*)lmHeadInt8.cpuData)[maxi*column + maxj];
     float valI = lbc.invQuantization(valInt8);
     ASSERT_NEAR(valF, valI, 0.001);
+
+    ASSERT_NEAR(((float*)lmHead.cpuData)[0], lmHeadInt8.perChannelsConfigs[0].invQuantization(((uint8_t*)lmHeadInt8.cpuData)[0]), 0.001);
+    ASSERT_NEAR(((float*)lmHead.cpuData)[10], lmHeadInt8.perChannelsConfigs[0].invQuantization(((uint8_t*)lmHeadInt8.cpuData)[10]), 0.001);
 }
 
 
@@ -68,6 +71,7 @@ xllm::WeightMap weightQuant("/root/autodl-tmp/llama2_7b_chat_int8.bin");
     ASSERT_EQ(emb.cpuData[7], embQuant.cpuData[3]);
 }
 
+// TODO: failed
 TEST(test_quant, linear) {
 
 xllm::PrintInstructionInfo();

@@ -374,6 +374,7 @@ namespace xllm{
                 }
 
                 MultiplyMultiThread(uinput.data(), weightData, (int32_t *) outputData, n, m, k, GetThreads());
+                // 遍历输出矩阵的行
                 for (int i = 0; i < n; i++) {
                     uint32_t inputSum = 0;  // 每一行的和
                     for (int j = 0; j < m; j++) {
@@ -384,6 +385,7 @@ namespace xllm{
 #endif
                     }
 
+                    // 遍历输出矩阵的列
                     for (int j = 0; j < k; j++) {
                         int value = ((int32_t *) outputData)[i * k + j];
 #ifdef __AVX2__

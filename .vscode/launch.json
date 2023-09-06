@@ -10,7 +10,7 @@
             "name": "Debug",
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/build/tests/unittest",
-            "args": ["--gtest_filter=test_data.CalcWeightSum2"],
+            "args": ["--gtest_filter=test_quant.linear"],
         }
     ]
 }
