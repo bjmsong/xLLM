@@ -2,25 +2,18 @@
 
 ![running](./video/.mp4)(压缩时长！1M左右最好, 录屏时把shell字体放大)
 
-基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
 - 支持llama2-7B
+- 动态KV cache
+- GEMM优化
 - 支持SIMD加速
-- 支持量化: FP16，INT8
+- 支持模型权重分组INT8量化
 - 支持BPE
 - 无第三方依赖
 - 代码量<4k行，代码结构简单
+- 中间激活值显存复用
 - 支持Linux
 - 单元测试
-
-
-|      |   硬件   |   推理速度(tokens/s)   |
-| ---- | ---- | ---- |
-|  FP16   |   4090   |      |
-|  FP16   |    Tesla T4  |      |
-|  FP16   |    Intel Xeon  |  1.4    |
-|  INT8    |  4090    |      |
-|  INT8    |   Tesla T4   |      |
-|  INT8    |   Intel Xeon   |      |
 
 
 ## 快速开始
@@ -33,7 +26,7 @@ conda create --name xllm
 conda activate xllm
 pip install -r scripts/requirements.txt
 huggingface-cli login
-python scripts/export_weight.py /pathto/llama2_7b_chat.bin
+python scripts/export_weight.py /pathto/cache /pathto/llama2_7b_chat.bin
 python scripts/export_tokenizer.py /pathto/tokenizer.bin
 ```
 
@@ -48,14 +41,6 @@ make -j4
 ```bash
 ./main --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --threads 32
 ```
-
-
-## 量化
-1. 导出INT8模型
-./quant --weight llama2_7b_chat.bin -o llama2_7b_chat_int8.bin -b 8
-
-2. 推理INT8模型
-./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
 
 
 ## 内存占用(以llama2-7B为例)
@@ -81,6 +66,13 @@ make -j4
 | 中间激活值 | 峰值           | 6bsh1+2bsh2+bs(s+n)           | FP32     | 5.8       |
 |            | 正常值         | 6bh1+2bh2+b(1+n)              | FP32     | 0.01      |
 
+
+## 量化
+1. 导出INT8模型
+./quant --weight llama2_7b_chat.bin -o llama2_7b_chat_int8.bin -b 8
+
+2. 推理INT8模型
+./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
 
 ## 单元测试
 

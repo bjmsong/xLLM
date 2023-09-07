@@ -138,8 +138,9 @@ def tofile(exportPath,
     fo.close()
 
 if __name__ == "__main__":
-    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir="/root/autodl-tmp/hf").float()
+    cachePath = sys.argv[1]
+    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", trust_remote_code=True, cache_dir=cachePath).float() # /root/autodl-tmp/hf
     model = model.eval()
 
-    exportPath = sys.argv[1]
+    exportPath = sys.argv[2]
     tofile(exportPath, model)

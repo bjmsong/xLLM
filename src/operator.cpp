@@ -161,18 +161,25 @@ namespace xllm{
 
 #ifdef __AVX__
 #ifdef __AVX2__
+    // TODO: 计算两个数组的点积 
     int DotU8U8(uint8_t *a, uint8_t *b, int n) {
+        // 全零的256位整数向量，用于累加乘积的结果
         __m256i acc = _mm256_setzero_si256();
         int i = 0;
         int ans = 0;
-        const __m256i lowMask = _mm256_set1_epi8(0xf);
+        // const __m256i lowMask = _mm256_set1_epi8(0xf);
+        // 全1的16位整数向量，用于将8位整数扩展为16位整数
         const __m256i ones = _mm256_set1_epi16(1);
+        // 全1的8位整数向量，用于将8位整数扩展为32位整数
         const __m256i ones8 = _mm256_set1_epi8(1);
+        // 全-128(10000000)的8位整数向量
         const __m256i xors = _mm256_set1_epi8(-128);
         for (; i + 31 < n; i += 32) {
+            // 加载256位整数向量
             __m256i bx = _mm256_loadu_si256((const __m256i *) (a + i));
             __m256i by = _mm256_loadu_si256((const __m256i *) (b + i));
 
+            // 将by第一位进行翻转
             by = _mm256_xor_si256(by, xors);
             by = _mm256_add_epi8(by, _mm256_and_si256(_mm256_cmpeq_epi8(by, xors), ones8));
 
