@@ -5,10 +5,11 @@
 llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前支持以下特性：
 - 支持llama2-7B
 - 动态KV cache
-- GEMM优化
-- 支持SIMD加速
+- 支持AVX加速
 - 支持模型权重分组INT8量化
 - 支持BPE
+- 支持batch推理
+- GEMM优化
 - 无第三方依赖
 - 代码量<4k行，代码结构简单
 - 中间激活值显存复用
@@ -69,13 +70,22 @@ make -j4
 
 ## 量化
 1. 导出INT8模型
+```bash
 ./quant --weight llama2_7b_chat.bin -o llama2_7b_chat_int8.bin -b 8
+```
 
 2. 推理INT8模型
+```bash
 ./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
+```
+
+## Profile
+```bash
+./benchmark --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --threads 32
+./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32
+```
 
 ## 单元测试
-
 ```bash
 cmake .. -DDEVELOPMENT=ON
 make -j4

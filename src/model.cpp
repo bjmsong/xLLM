@@ -132,6 +132,122 @@ namespace xllm {
         return retString;
     }
 
+    void LlamaModel::ResponseBatch(const std::vector<std::vector<float>> &prompts, std::vector<std::string> &outputs,
+                                   RuntimeResultBatch retCb, const GenerationConfig &generationConfig) {
+        int batch = prompts.size();
+        outputs.clear();
+        outputs.resize(batch, "");
+
+        std::vector<Data> inputTokens;
+        std::vector<int> seqLens;
+        seqLens.resize(batch);
+        int maxLen = 0;
+        for (int i = 0; i < batch; i++) {
+            seqLens[i] = prompts[i].size();
+            maxLen = std::max(maxLen, seqLens[i]);
+            inputTokens.push_back(Data(DataType::FLOAT32, {1, seqLens[i]} , prompts[i]));
+        }
+
+        std::vector <float> ids = std::vector <float> (batch * maxLen, 0);
+        std::vector <float> vpids = std::vector <float> (batch * maxLen, 0);
+        std::vector <float> vmask = std::vector <float> (batch * maxLen * maxLen, 0);
+        for (int i = 0; i < batch; i++) {
+            int len = inputTokens[i].counts, base = maxLen - len;
+            for (int j = 0; j < len; j++) {
+                ids[i * maxLen + base + j] = ((float*)inputTokens[i].cpuData)[j];
+            }
+            for (int j = 0; j < len; j++) {
+                vpids[i * maxLen + base + j] = j;
+            }
+
+            std::fill(vmask.data() + i * maxLen * maxLen,
+                      vmask.data() + i * maxLen * maxLen + (maxLen - len) * maxLen, 1.0);
+            for (int j = maxLen - len; j < maxLen; j++) {
+                std::fill(vmask.data() + i * maxLen * maxLen + j * maxLen,
+                          vmask.data() + i * maxLen * maxLen + j * maxLen + maxLen - len, 1.0);
+            }
+            for (int j = 0; j < len; j++) {
+                for (int k = j + 1; k < len; k++) {
+                    vmask[i * maxLen * maxLen + (base + j) * maxLen + base + k] = 1;
+                }
+            }
+        }
+
+        Data inputIds = Data(DataType::FLOAT32, {batch, maxLen}, ids);
+        Data attentionMask = Data(DataType::FLOAT32, {batch, maxLen, maxLen}, vmask);
+        Data positionIds = Data(DataType::FLOAT32, {batch, maxLen}, vpids);
+
+        std::vector <std::pair <Data, Data> > pastKeyValues;
+        for (int i = 0; i < params.block_cnt; i++) {
+            pastKeyValues.push_back(std::make_pair(Data(DataType::FLOAT32),
+                                                   Data(DataType::FLOAT32)));
+        }
+
+        std::string retString = "";
+        std::vector <int> lens = seqLens;
+        std::vector <bool> isEnding = std::vector <bool> (batch, false);
+        std::vector <float> results;
+        int index = 0;
+
+        LastTokensManager tokensManager (batch, generationConfig.last_n);
+        while (true) {
+            auto st = std::chrono::system_clock::now();
+            std::vector <int> ret = ForwardBatch(batch, inputIds, attentionMask, positionIds, pastKeyValues,
+                                                 generationConfig, tokensManager);
+            for (int i = 0; i < batch; i++) {
+                tokensManager.units[i].Push(ret[i]);
+            }
+            std::vector <float> fret;
+            std::vector <float> results;
+            int endingCount = 0;
+            std::vector <std::string> curStrings;
+            for (int i = 0; i < batch; i++) {
+                fret.push_back(ret[i]);
+                if (ret[i] == tokenizer.eos_id) {
+                    isEnding[i] = true;
+                }
+                if (isEnding[i]) {
+                    curStrings.push_back("");
+                    endingCount++;
+                    continue;
+                }
+                results.push_back(ret[i]);
+                std::string curString = tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results));
+                outputs[i] += curString;
+                curStrings.push_back(curString);
+                results.clear();
+            }
+
+            if (endingCount == batch) {
+                break;
+            }
+            if (retCb) 
+                retCb(index, curStrings);
+            index++;
+
+            maxLen++;
+            std::vector <float> pids = std::vector <float> (batch);
+            std::vector <float> vmasks = std::vector <float> (batch * maxLen, 0.0f);
+            for (int i = 0; i < batch; i++) {
+                pids[i] = lens[i];
+                lens[i]++;
+                for (int j = 0; j < maxLen - lens[i]; j++) {
+                    vmasks[i * maxLen + j] = 1.0f;
+                }
+            }
+            attentionMask.CopyFrom(Data(DataType::FLOAT32, {batch, 1, maxLen}, vmasks));
+            inputIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, fret));
+            positionIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, pids));
+            if (index == generationConfig.output_token_limit) {
+                break;
+            }
+
+            //printf("spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
+        }
+        if (retCb)
+            retCb(-1, outputs);
+    }
+
     int LlamaModel::Forward(const Data &inputIds, const Data &attentionMask, const Data &positionIds, 
                             std::vector<std::pair<Data, Data>> &pastKeyValues,
                             const GenerationConfig &generationConfig, const LastTokensManager &lastTokens,
@@ -216,7 +332,6 @@ namespace xllm {
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
-            // 只有第一轮需要mask
             if (attentionMask.dims.size() != 0) {
                 AttentionMask(attenWeights, attentionMask, -10000);
             }
@@ -274,6 +389,133 @@ namespace xllm {
         }
 
         return lastRet; 
+    }
+
+    std::vector <int> LlamaModel::ForwardBatch(int batch, const xllm::Data &inputIds, const xllm::Data &attentionMask,
+                            const xllm::Data &positionIds, std::vector<std::pair<Data, Data>> &pastKeyValues,
+                            const GenerationConfig &generationConfig, const LastTokensManager &lastTokens,
+                            std::vector <std::vector <float>*> *retLogits) {
+        int bsz = batch, seqlen = inputIds.dims[1];
+        Data hiddenStates(DataType::FLOAT32, {bsz, seqlen, params.embed_dim});
+        Data attenInput(DataType::FLOAT32, hiddenStates.dims);
+        Data q(DataType::FLOAT32, hiddenStates.dims), k(DataType::FLOAT32, hiddenStates.dims), v(DataType::FLOAT32, hiddenStates.dims);
+        Data attenOutput(DataType::FLOAT32, {bsz, params.num_attention_heads, seqlen, params.hidden_size/params.num_attention_heads});
+        Data attenLastOutput(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
+        Data w1(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
+        Data w3(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
+        Data w2(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
+
+        Embedding(inputIds, this->weight["model.embed_tokens.weight"], hiddenStates);
+        for (int i = 0; i < params.block_cnt; i++) {
+            RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
+                    attenInput, 1e-6);
+            std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
+            std::string kWeightName = "model.layers." + std::to_string(i) + ".self_attn.k_proj.weight";
+            std::string vWeightName = "model.layers." + std::to_string(i) + ".self_attn.v_proj.weight";
+            std::string qkvWeightName = "model.layers." + std::to_string(i) + ".self_attn.W_pack.weight";
+            std::string oWeightName = "model.layers." + std::to_string(i) + ".self_attn.o_proj.weight";
+
+            // 1.1 Get q, k, v
+            Linear(attenInput, weight[qWeightName], q);
+            Linear(attenInput, weight[kWeightName], k);
+            Linear(attenInput, weight[vWeightName], v);
+
+            std::vector <int> qkvSize = {bsz, seqlen, params.num_attention_heads, -1};
+            q.Reshape(qkvSize);
+            k.Reshape(qkvSize);
+            v.Reshape(qkvSize);
+
+            xllm::LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
+            xllm::LlamaRotatePosition2D(k, positionIds, sinData, cosData, params.rotary_dim);
+
+            PermuteSelf(q, {0, 2, 1, 3});
+            PermuteSelf(k, {0, 2, 1, 3});
+            PermuteSelf(v, {0, 2, 1, 3});
+
+            qkvSize = {bsz * params.num_attention_heads, seqlen, -1};
+            q.Reshape(qkvSize);
+            k.Reshape(qkvSize);
+            v.Reshape(qkvSize);
+
+            Data &pastKey = pastKeyValues[i].first, &pastValue = pastKeyValues[i].second;
+            int unitLen = 64;
+            while ((pastKey.dims.size() == 0 && (pastKey.expandDims.size() == 0 || k.dims[1] > pastKey.expandDims[1]))
+                   || (pastKey.dims.size() > 0 && pastKey.dims[1] + k.dims[1] > pastKey.expandDims[1])) {
+                std::vector <int> newDims;
+                if (pastKey.Count(0) == 0 || pastKey.dims.size() == 0) {
+                    newDims = std::vector <int> {k.dims[0], ((k.dims[1] - 1) / unitLen + 1) * unitLen, k.dims[2]};
+                } else {
+                    newDims = pastKey.dims;
+                    newDims[1] += ((k.dims[1] - 1) / unitLen + 1) * unitLen;
+                }
+                pastKey.Expansion(newDims);
+            }
+            while ((pastValue.dims.size() == 0 && (pastValue.expandDims.size() == 0 || v.dims[1] > pastValue.expandDims[1]))
+                   || (pastValue.dims.size() > 0 && pastValue.dims[1] + v.dims[1] > pastValue.expandDims[1])) {
+                std::vector <int> newDims;
+                if (pastValue.Count(0) == 0 || pastValue.dims.size() == 0) {
+                    newDims = std::vector <int> {v.dims[0], ((v.dims[1] - 1) / unitLen + 1) * unitLen, v.dims[2]};
+                } else {
+                    newDims = pastValue.dims;
+                    newDims[1] += ((v.dims[1] - 1) / unitLen + 1) * unitLen;
+                }
+                pastValue.Expansion(newDims);
+            }
+
+            CatDirect(pastKey, k, 1);
+            CatDirect(pastValue, v, 1);
+
+            // 1.2 Attention
+            // 1.2.0 q * k^T
+            Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
+            MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
+            attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
+            if (attentionMask.dims.size() != 0) {
+                AttentionMask(attenWeights, attentionMask, -10000);
+            }
+            SoftMax(attenWeights, attenWeights, -1);
+            // attenOutput: {bsz, num_attention_heads, seq_len, hidden_size/num_attention_heads}
+            MatMul(attenWeights, pastValue, attenOutput);
+
+            attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
+            PermuteSelf(attenOutput, {1, 0, 2});
+            attenOutput.Reshape({seqlen, bsz, -1});
+            PermuteSelf(attenOutput, {1, 0, 2});
+
+            Linear(attenOutput, weight[oWeightName], attenLastOutput);
+            AddTo(hiddenStates, attenLastOutput);
+            // 2. mlp
+            RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".post_attention_layernorm.weight"], attenInput, 1e-6);
+            Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.gate_proj.weight"], w1);
+            Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.up_proj.weight"], w3);
+            Silu(w1, w1);
+            MulTo(w1, w3);
+            Linear(w1, weight["model.layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
+            AddTo(hiddenStates, w2);
+        }
+
+        RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
+        Data logits;
+        Linear(hiddenStates, weight["lm_head.weight"], logits);
+
+        std::vector <int> lastRet;
+        if (generationConfig.IsSimpleGreedy()) {
+            for (int b = 0; b < batch; b++) {
+                int base = b * logits.dims[1] + logits.dims[1] - 1;
+                std::pair <float, int> ret = std::make_pair(-1e9, -1);
+                for (int i = 0; i < logits.dims.back(); i++) {
+                    ret = max(ret, std::make_pair(((float *) logits.cpuData)[base * logits.dims.back() + i], i));
+                }
+                lastRet.push_back(ret.second);
+            }
+        } else {
+            for (int b = 0; b < batch; b++) {
+                int base = b * logits.dims[1] + logits.dims[1] - 1;
+                lastRet.push_back(TOPKSampling(logits, base, generationConfig, lastTokens.units[b]));
+            }
+        }
+
+        return lastRet;
     }
 
     struct Random {

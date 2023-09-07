@@ -13,6 +13,7 @@
 #include "operator.h"
 
 using RuntimeResult = std::function<void(int index, const char* content)>;
+using RuntimeResultBatch = std::function<void(int index, std::vector <std::string> &contents)>;
 
 namespace xllm {
 
@@ -86,9 +87,22 @@ namespace xllm {
                 const GenerationConfig &generationConfig = GenerationConfig(),
                 const LastTokensManager &lastTokens = LastTokensManager(), std::vector <float> *logits = nullptr);
 
+        std::vector <int> ForwardBatch(
+                int batch,
+                const Data &inputIds,
+                const Data &attentionMask,
+                const Data &positionIds,
+                std::vector <std::pair <Data, Data> > &pastKeyValues,
+                const GenerationConfig &generationConfig = GenerationConfig(),
+                const LastTokensManager &lastTokens = LastTokensManager(),
+                std::vector <std::vector <float>*> *logits = nullptr);
+                
         std::string Response(const std::vector<float>& input,
                                      RuntimeResult retCb,
                                      const GenerationConfig &generationConfig = GenerationConfig()); // 根据给出的内容回复
+
+        void ResponseBatch(const std::vector<std::vector<float>> &inputs, std::vector<std::string> &outputs,
+                           RuntimeResultBatch retCb, const GenerationConfig &generationConfig);
 
         void WarmUp(); // 预热
 

@@ -19,8 +19,11 @@ target_link_libraries(xllm PUBLIC ${XLLM_LINKED_LIBS})
 add_executable(main main.cpp)
 target_link_libraries(main xllm)
 
-add_executable(benchmark src/benchmark.cpp)
+add_executable(benchmark benchmark/benchmark.cpp)
 target_link_libraries(benchmark xllm)
+
+add_executable(benchmark_batch benchmark/benchmark_batch.cpp)
+target_link_libraries(benchmark_batch xllm)
 
 add_executable(quant src/quant.cpp)
 target_link_libraries(quant xllm)

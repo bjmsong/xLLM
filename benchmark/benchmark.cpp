@@ -3,8 +3,8 @@
 #include "fstream"
 
 struct BenchmarkConfig {
-    std::string weightPath = "/root/autodl-tmp/llama2_7b_chat.bin";  // 模型文件路径
-    std::string tokenPath = "/root/autodl-tmp/tokenizer.bin";
+    std::string weightPath;
+    std::string tokenPath;
     int threads = 4; // 使用的线程数
     int limit = -1; // 输出token数限制，如果 < 0 则代表无限制
     std::string output; // 输出文件，如果不设定则输出到屏幕
