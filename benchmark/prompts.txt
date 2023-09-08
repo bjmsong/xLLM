@@ -1,4 +1,2 @@
-Who are you?
-How to learn C++?
-What's the greateast president in USA?
 Hello
+Who are you?

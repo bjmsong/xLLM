@@ -155,8 +155,6 @@ namespace xllm {
             int len = inputTokens[i].counts, base = maxLen - len;
             for (int j = 0; j < len; j++) {
                 ids[i * maxLen + base + j] = ((float*)inputTokens[i].cpuData)[j];
-            }
-            for (int j = 0; j < len; j++) {
                 vpids[i * maxLen + base + j] = j;
             }
 
@@ -416,6 +414,9 @@ namespace xllm {
             std::string oWeightName = "model.layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
+            q.Reshape(hiddenStates.dims);
+            k.Reshape(hiddenStates.dims);
+            v.Reshape(hiddenStates.dims);
             Linear(attenInput, weight[qWeightName], q);
             Linear(attenInput, weight[kWeightName], k);
             Linear(attenInput, weight[vWeightName], v);
@@ -474,10 +475,9 @@ namespace xllm {
                 AttentionMask(attenWeights, attentionMask, -10000);
             }
             SoftMax(attenWeights, attenWeights, -1);
-            // attenOutput: {bsz, num_attention_heads, seq_len, hidden_size/num_attention_heads}
+            attenOutput.Reshape({bsz*params.num_attention_heads, seqlen, -1});
             MatMul(attenWeights, pastValue, attenOutput);
 
-            attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
             PermuteSelf(attenOutput, {1, 0, 2});
             attenOutput.Reshape({seqlen, bsz, -1});
             PermuteSelf(attenOutput, {1, 0, 2});
@@ -495,7 +495,7 @@ namespace xllm {
         }
 
         RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
-        Data logits;
+        Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
         Linear(hiddenStates, weight["lm_head.weight"], logits);
 
         std::vector <int> lastRet;

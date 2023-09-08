@@ -97,6 +97,26 @@ TEST(test_operator, PermuteSelf_axis_102) {
     ASSERT_EQ(input.counts, 24);
 }
 
+
+TEST(test_operator, PermuteSelf_axis_0213) {
+    std::vector<float> v;
+    for (int i = 0; i < 48; i ++) {
+        v.push_back(i);
+    }
+    Data input(DataType::FLOAT32, {2, 3, 4, 2}, v);
+    PermuteSelf(input, {0, 2, 1, 3});
+    ASSERT_EQ(((float*)input.cpuData)[0], 0);
+    ASSERT_EQ(((float*)input.cpuData)[4], 16);
+    ASSERT_EQ(((float*)input.cpuData)[6], 2);
+    ASSERT_EQ(((float*)input.cpuData)[12], 4);
+    ASSERT_EQ(((float*)input.cpuData)[24], 24);
+    ASSERT_EQ(input.dims[0], 2);
+    ASSERT_EQ(input.dims[1], 4);
+    ASSERT_EQ(input.dims[2], 3);
+    ASSERT_EQ(input.dims[3], 2);
+    ASSERT_EQ(input.counts, 48);
+}
+
 TEST(test_operator, CatDirect) {
     // pastKey扩容
     Data pastKey(DataType::FLOAT32);
