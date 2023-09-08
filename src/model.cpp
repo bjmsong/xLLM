@@ -468,6 +468,7 @@ namespace xllm {
 
             // 1.2 Attention
             // 1.2.0 q * k^T
+            // TODO: 一次性分配好空间
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
