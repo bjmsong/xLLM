@@ -1,6 +1,6 @@
 ## 介绍
 
-![running](./video/.mp4)(压缩时长！1M左右最好, 录屏时把shell字体放大)
+![running](./data/.mp4)(压缩时长！1M左右最好, 录屏时把shell字体放大)
 
 llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前具备以下特性：
 | 特性       | 减少显存 | 减少访存 | 减少计算 | 加快访存 | 加快计算 |
@@ -12,14 +12,14 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | 动态KV cache   | ✅        |          | ✅        |          |          |
 | batch推理      |          | ✅        |          |          |          |
 | 激活值显存复用 | ✅        |          |          |          |          |
-| 访问缓存       |          | ✅        |          |          |          |
+| 访问连续内存       |          | ✅        |          |          |          |
 
-
-- BPE
-- 无第三方依赖
-- 代码量<5k行，代码结构简单
-- Linux
-- 单元测试
+- 其它
+  - BPE
+  - 无第三方依赖
+  - 代码量<5k行，代码结构简单
+  - Linux
+  - 单元测试
 
 ## 吞吐量测试
 llama2-7B
@@ -88,6 +88,7 @@ make -j4
 | attention score  | 2bh1(s+n) | 2bh1(s+n) | 0.5            | 0.5        | 0.007        | 0.5          | **memory** |
 | attention output | 2bh1(n+s) | 2bh1(s+n) | 0.5            | 0.5        | 0.007        | 0.5          | **memory** |
 
+![bound](/data/bound.png)
 
 ## 量化
 1. 导出INT8模型
