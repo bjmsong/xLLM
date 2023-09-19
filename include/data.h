@@ -136,7 +136,6 @@ class Data {
         void UpdateUnitSize(); // 更新unitSize
 
         void Resize(const std::vector <int> &dims); // 更改尺寸
-
         void Reshape(const std::vector <int> &dims); // 更改尺寸, 但不移动数据
 
         uint64_t Count(int i) const;

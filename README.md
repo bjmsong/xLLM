@@ -2,27 +2,27 @@
 
 ![running](./data/.mp4)(压缩时长！1M左右最好, 录屏时把shell字体放大)
 
-llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发，目前具备以下特性：
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，代码量<4k行，提供单元测试。
+
+目前支持以下优化策略：
 | 优化手段       | 减少显存 | 减少访存 | 减少计算 | 加快访存 | 加快计算 |
 | -------------- | -------- | -------- | -------- | -------- | -------- |
+| 动态KV cache   | ✅        |          | ✅        |          |          |
 | 量化           | ✅        | ✅        |          |          |          |
 | GPU/CUDA       |          |          |          | ✅        | ✅        |
 | SIMD           |          |          |          |          | ✅        |
 | 多线程         |          |          |          |          | ✅        |
-| 动态KV cache   | ✅        |          | ✅        |          |          |
-| batch推理      |          | ✅        |          |          |          |
 | 激活值显存复用 | ✅        |          |          |          |          |
 | GEMM优化       |          | ✅        | ✅        |          |          |
 
-- 其它
-  - BPE
-  - 无第三方依赖
-  - 代码量<4k行，代码结构简单
-  - Linux
-  - 单元测试
 
 ## 吞吐量测试
 llama2-7B
+
+```bash
+./benchmark --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --threads 32
+./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32
+```
 
 ## 快速开始
 1. 导出模型
@@ -40,6 +40,12 @@ python scripts/export_tokenizer.py /pathto/tokenizer.bin
 
 2.  编译
 ```bash
+# 使用GPU
+mkdir build-cuda && cd build-cuda
+cmake .. -DUSE_CUDA=ON
+make -j4
+
+# 不使用GPU
 mkdir build && cd build
 cmake ..
 make -j4
@@ -90,6 +96,7 @@ make -j4
 
 ![bound](/data/bound.png)
 
+
 ## 量化
 1. 导出INT8模型
 ```bash
@@ -99,12 +106,6 @@ make -j4
 2. 推理INT8模型
 ```bash
 ./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
-```
-
-## Profile
-```bash
-./benchmark --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --threads 32
-./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32
 ```
 
 ## 单元测试

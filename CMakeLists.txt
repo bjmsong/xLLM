@@ -10,6 +10,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread --std=c++17 -march=native")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
+option(USE_CUDA "use cuda" OFF)
+message(STATUS "USE_CUDA: ${USE_CUDA}")
+if (USE_CUDA)
+    enable_language(CUDA)
+    add_compile_definitions(USE_CUDA)  #  添加预处理宏：USE_CUDA
+    include_directories(include/devices/cuda)
+    message(${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+    set(XLLM_CUDA_SOURCES src/devices/cuda/cudadevice.cpp src/devices/cuda/xllm-cuda.cu)
+    set(XLLM_LINKED_LIBS ${XLLM_LINKED_LIBS} cublas)
+    set(CMAKE_CUDA_ARCHITECTURES "native")
+endif()
+
 set(XLLM_CXX_SOURCES src/param.cpp src/data.cpp src/operator.cpp src/xllm.cpp src/model.cpp)
 
 include_directories(include)
