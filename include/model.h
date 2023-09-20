@@ -78,8 +78,6 @@ namespace xllm {
 
         LlamaModel (const std::string &weightPath, const std::string &tokenPath);
         
-        void InitParams(); // 初始化参数信息
-
         // 推理
         int Forward(
                 const Data &inputIds, const Data &attentionMask, const Data &positionIds,

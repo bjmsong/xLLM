@@ -155,6 +155,7 @@ namespace xllm{
         }
         expandBytes = (expandCounts * unitSize - 1) / unitSizeDiv + 1;
 
+        // 还没有分配空间
         if (this->dims.size() == 0 || assignBytes == 0) {
             this->MallocSpace(expandBytes);
             return;
@@ -165,6 +166,7 @@ namespace xllm{
             AssertInXLLM(dims[i] == -1 || dims[i] >= this->dims[i], "Expansion error: real size should <= expansion size.\n");
         }
 
+        // 如果已分配空间，需要把原来的数据拷贝到新的空间
         uint8_t *old = this->cpuData;
         MallocSpace(expandBytes);
 
@@ -178,7 +180,6 @@ namespace xllm{
         }
 
         int inputStride = this->Count(axis);
-        // 把原来的数据拷贝到新的空间
         int outer = this->counts / inputStride;
         for (int o = 0; o < outer; o++) {
             memcpy(this->cpuData + o * inputStride/this->dims[axis]*dims[axis] * unitSize,
