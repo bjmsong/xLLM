@@ -10,11 +10,16 @@
 namespace xllm{
 
 enum DataType {
-    FLOAT32 = 0, BFLOAT16 = 1, INT8 = 3, INT4 = 4, INT4_NOZERO = 8, FLOAT16 = 7
+    FLOAT32 = 0, BFLOAT16 = 1, INT8 = 3, INT4 = 4, INT4_NOZERO = 8, FLOAT16 = 7,
+    INT32PARAM = 100 // int32的参数，这种类型的数据永远存在CPU上
 };
 
 enum WeightType {
     NONE = 0, LINEAR = 1, EMBEDDING = 2
+};
+
+enum DataDevice {
+    CPU = 0, CUDA = 1
 };
 
 struct LowBitConfig {
@@ -110,7 +115,9 @@ class Data {
         uint64_t expandBytes = 0; // 字节
 
         uint8_t *cpuData = nullptr; // 数据指针
-
+        void *cudaData = nullptr;
+        void *deviceData = nullptr;
+        
         // 量化相关的参数
         int perChannelAxis = -1; // 沿哪个轴分通道量化，-1代表没有分通道
         std::vector <LowBitConfig> perChannelsConfigs; // perChannelsConfigs[i]代表第i个通道的min, max; 如果没有分通道，perChannelsConfigs[0]代表全局min, max
@@ -123,6 +130,9 @@ class Data {
         Data (DataType type, const std::vector <int> &dims);
         Data (DataType type, const std::vector <int> &dims, const std::vector <float> &data);
 
+        void ToDevice(void *device);
+        void ToDevice(DataDevice device, const std::vector <int> &deviceIds);
+        
         ~Data(); 
 
         Data (const Data &ori); // 深拷贝

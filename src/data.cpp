@@ -1,4 +1,5 @@
 #include "data.h"
+#include "device.h"
 
 namespace xllm{
 
@@ -48,6 +49,22 @@ namespace xllm{
         if (type == DataType::FLOAT32) {
             memcpy(cpuData, data.data(), bytes);
         }
+    }
+
+    void Data::ToDevice(void *device) {
+        BaseDevice *dev = (BaseDevice*)device;
+        if (dev->deviceType == "cuda") {
+            this->ToDevice(DataDevice::CUDA, dev->deviceIds);
+        } else {
+            this->ToDevice(DataDevice::CPU, dev->deviceIds);
+        }
+    }
+
+    void Data::ToDevice(DataDevice device, const std::vector <int> &deviceIds) {
+        if (this->dataType == DataType::INT32PARAM) {
+            return;
+        }
+        return;
     }
 
     void Data::Allocate() {

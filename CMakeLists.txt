@@ -15,16 +15,18 @@ message(STATUS "USE_CUDA: ${USE_CUDA}")
 if (USE_CUDA)
     enable_language(CUDA)
     add_compile_definitions(USE_CUDA)  #  添加预处理宏：USE_CUDA
-    include_directories(include/devices/cuda)
+    include_directories(include/cuda)
     message(${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
     set(XLLM_CUDA_SOURCES src/devices/cuda/cudadevice.cpp src/devices/cuda/xllm-cuda.cu)
     set(XLLM_LINKED_LIBS ${XLLM_LINKED_LIBS} cublas)
     set(CMAKE_CUDA_ARCHITECTURES "native")
 endif()
 
-set(XLLM_CXX_SOURCES src/param.cpp src/data.cpp src/operator.cpp src/xllm.cpp src/model.cpp)
+set(XLLM_CXX_SOURCES src/param.cpp src/data.cpp src/xllm.cpp src/model.cpp
+    src/cpu/cpudevice.cpp src/executor.cpp src/device.cpp)
 
 include_directories(include)
+include_directories(include/cpu)
 add_library(xllm OBJECT ${XLLM_CXX_SOURCES})
 target_link_libraries(xllm PUBLIC ${XLLM_LINKED_LIBS})
 

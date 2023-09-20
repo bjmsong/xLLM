@@ -4,13 +4,18 @@
 #include <iostream>
 #include <vector>
 #include <math.h>
+#include <map>
+
 #include "threadpool.h"
+#include "data.h"
 
 namespace xllm {
     void PrintInstructionInfo();
     void SetThreads(int t);
     int GetThreads();
     ThreadPool *GetPool();
+
+    class Data;
 
     struct GenerationConfig {
         int output_token_limit = -1; // 最多输出多少, <= 0代表无限制
@@ -30,5 +35,19 @@ namespace xllm {
             return true;
         }
     };
+
+    void Embedding(const Data &input, Data &weight, Data &output);
+    void RMSNorm(const Data &input, const Data &weight, Data &output, float eps);
+    void Linear(Data &input, Data &weight, Data &output);
+    void LlamaRotatePosition2D(Data &input, const Data &positionIds, Data &sinData, Data &cosData, int rotaryDim); // 2D position for llama
+    void PermuteSelf(const Data &input, const std::vector<int> &axis); // 转置
+    void CatDirect(Data &input0, const Data &input1, int axis); // 直接把input1的数据拷贝到input0后面（需要input0提前扩容了足够的空间）
+    void MatMulTransB(const Data &input0, const Data &input1, Data &output, float alpha = 1.0);
+    void AttentionMask(Data &input, const Data &mask, float maskValue); // 把input里对应位置mask中为1的部分变成maskValue
+    void SoftMax(const Data &input, Data &output, int axis);
+    void MatMul(const Data &input0, const Data &input1, Data &output, float alpha = 1.0);
+    void AddTo(Data &input0, const Data &input1, float alpha = 1.0); // input0 += input1 * alpha
+    void Silu(const Data &input, Data &output);
+    void MulTo(Data &input0, const Data &input1); // input0 *= input1
 
 }

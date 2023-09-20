@@ -10,7 +10,6 @@
 #include "data.h"
 #include "param.h"
 #include "xllm.h"
-#include "operator.h"
 
 using RuntimeResult = std::function<void(int index, const char* content)>;
 using RuntimeResultBatch = std::function<void(int index, std::vector <std::string> &contents)>;
