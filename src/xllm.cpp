@@ -115,4 +115,12 @@ namespace xllm {
                 {"input0", &input0}, {"input1", (Data*)&input1}
         }, {}, {});
     }
+
+    void ClearProfiler() {
+        curExecutor->ClearProfiler();
+    }
+
+    void PrintProfiler() {
+        curExecutor->PrintProfiler();
+    }
 }

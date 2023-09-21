@@ -30,4 +30,17 @@ namespace xllm {
         float spend = GetSpan(st, std::chrono::system_clock::now());
         profiler[opType] += spend;
     }
+
+    void Executor::ClearProfiler() {
+        profiler.clear();
+    }
+
+    void Executor::PrintProfiler() {
+        float sum = 0.0;
+        for (auto &it : profiler) {
+            printf("%s spend %f\n", it.first.c_str(), it.second);
+            sum += it.second;
+        }
+        printf("total spend %f\n", sum);
+    }
 }

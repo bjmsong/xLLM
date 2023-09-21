@@ -1,6 +1,7 @@
+#include "fstream"
+
 #include "model.h"
 #include "utils.h"
-#include "fstream"
 
 struct BenchmarkConfig {
     std::string weightPath;
@@ -78,5 +79,6 @@ int main(int argc, char **argv) {
     float spend = xllm::GetSpan(st, std::chrono::system_clock::now());
 
     printf("output %d tokens\nuse %f s\nspeed = %f tokens / s\n", tokens, spend, tokens / spend);
+    // xllm::PrintProfiler();
     return 0;
 }

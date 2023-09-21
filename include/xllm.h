@@ -14,7 +14,8 @@ namespace xllm {
     void SetThreads(int t);
     int GetThreads();
     ThreadPool *GetPool();
-
+    void PrintProfiler();
+    
     class Data;
 
     struct GenerationConfig {
