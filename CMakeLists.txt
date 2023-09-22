@@ -3,21 +3,23 @@ cmake_minimum_required(VERSION 3.5)
 project(xllm LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread --std=c++17 -O2 -march=native")
+# set(CMAKE_BUILD_TYPE "Release")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread --std=c++17 -O2 -march=native")
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread --std=c++17 -march=native")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread --std=c++17 -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
 option(USE_CUDA "use cuda" OFF)
 message(STATUS "USE_CUDA: ${USE_CUDA}")
 if (USE_CUDA)
     enable_language(CUDA)
     add_compile_definitions(USE_CUDA)  #  添加预处理宏：USE_CUDA
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G")
     include_directories(include/cuda)
     message(${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
     set(XLLM_CUDA_SOURCES src/cuda/cudadevice.cpp src/cuda/xllm-cuda.cu)
     set(XLLM_LINKED_LIBS ${XLLM_LINKED_LIBS} cublas)
+    link_directories(/usr/local/cuda/lib64)
     set(CMAKE_CUDA_ARCHITECTURES "all")
 endif()
 
@@ -26,7 +28,7 @@ set(XLLM_CXX_SOURCES src/param.cpp src/data.cpp src/xllm.cpp src/model.cpp
 
 include_directories(include)
 include_directories(include/cpu)
-add_library(xllm OBJECT ${XLLM_CXX_SOURCES})
+add_library(xllm OBJECT ${XLLM_CXX_SOURCES} ${XLLM_CUDA_SOURCES})
 target_link_libraries(xllm PUBLIC ${XLLM_LINKED_LIBS})
 
 add_executable(main main.cpp)

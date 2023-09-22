@@ -1,5 +1,6 @@
 #include "data.h"
 #include "device.h"
+#include "xllm-cuda.cuh"
 
 namespace xllm{
 
@@ -60,6 +61,14 @@ namespace xllm{
         }
     }
 
+    void Data::ToDevice(DataDevice device) {
+        if (device == DataDevice::CUDA) {
+            ToDevice(device, {0});
+        } else {
+            ToDevice(device, {0});
+        }
+    }
+
     void Data::ToDevice(DataDevice device, const std::vector <int> &deviceIds) {
         if (this->dataType == DataType::INT32PARAM) {
             return;
@@ -73,28 +82,28 @@ namespace xllm{
         if (this->assignBytes != 0) {
             if (this->dataDevice == DataDevice::CPU) {
                 if (device == DataDevice::CUDA) {
-                    FastllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
-                    this->cudaData = FastllmCudaMalloc(expansionBytes);
-                    FastllmCudaCopyFromHostToDevice(this->cudaData, this->cpuData, expansionBytes);
+                    xllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
+                    this->cudaData = xllmCudaMalloc(assignBytes);
+                    xllmCudaCopyFromHostToDevice(this->cudaData, this->cpuData, assignBytes);
                     delete[] this->cpuData;
                     this->cpuData = nullptr;
                 }
             } else if (this->dataDevice == DataDevice::CUDA) {
                 if (device == DataDevice::CPU) {
-                    this->cpuData = new uint8_t[expansionBytes];
-                    FastllmCudaCopyFromDeviceToHost(this->cpuData, this->cudaData, expansionBytes);
-                    FastllmCudaFree(this->cudaData);
+                    this->cpuData = new uint8_t[assignBytes];
+                    xllmCudaCopyFromDeviceToHost(this->cpuData, this->cudaData, assignBytes);
+                    xllmCudaFree(this->cudaData);
                     this->cudaData = nullptr;
                 } else if (device == DataDevice::CUDA) {
-                    FastllmCudaSetDevice(this->dataDeviceIds.size() == 0 ? 0 : this->dataDeviceIds[0]);
-                    uint8_t *cpuData = new uint8_t[expansionBytes];
-                    FastllmCudaCopyFromDeviceToHost(cpuData, this->cudaData, expansionBytes);
-                    FastllmCudaFree(this->cudaData);
+                    xllmCudaSetDevice(this->dataDeviceIds.size() == 0 ? 0 : this->dataDeviceIds[0]);
+                    uint8_t *cpuData = new uint8_t[assignBytes];
+                    xllmCudaCopyFromDeviceToHost(cpuData, this->cudaData, assignBytes);
+                    xllmCudaFree(this->cudaData);
 
-                    FastllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
-                    this->cudaData = FastllmCudaMalloc(expansionBytes);
+                    xllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
+                    this->cudaData = xllmCudaMalloc(assignBytes);
 
-                    FastllmCudaCopyFromHostToDevice(this->cudaData, cpuData, expansionBytes);
+                    xllmCudaCopyFromHostToDevice(this->cudaData, cpuData, assignBytes);
                     delete[] cpuData;
                 }
             }

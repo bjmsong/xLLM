@@ -13,8 +13,6 @@ namespace xllm {
 
         ~Executor();
 
-        std::vector <int> GetDeviceIds(const std::string &device); // 获取指定device的deviceIds
-
         // 运行一个op
         void Run(const std::string &opType, const xllm::DataDict &datas, const xllm::FloatDict &floatParams,
                  const xllm::IntDict &intParams);

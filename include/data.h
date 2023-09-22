@@ -116,9 +116,12 @@ class Data {
 
         uint8_t *cpuData = nullptr; // 数据指针
         void *cudaData = nullptr;
+        std::vector <void*> extraCudaData;  //
+
         DataDevice dataDevice = DataDevice::CPU;  // 标记当前数据在哪个设备上
         std::vector <int> dataDeviceIds;
-        
+        void *deviceData = nullptr;
+
         // 量化相关的参数
         int perChannelAxis = -1; // 沿哪个轴分通道量化，-1代表没有分通道
         std::vector <LowBitConfig> perChannelsConfigs; // perChannelsConfigs[i]代表第i个通道的min, max; 如果没有分通道，perChannelsConfigs[0]代表全局min, max
@@ -131,6 +134,7 @@ class Data {
         Data (DataType type, const std::vector <int> &dims);
         Data (DataType type, const std::vector <int> &dims, const std::vector <float> &data);
 
+        void ToDevice(DataDevice device);
         void ToDevice(void *device);
         void ToDevice(DataDevice device, const std::vector <int> &deviceIds);
         

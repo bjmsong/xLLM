@@ -14,11 +14,6 @@ class CudaDevice : BaseDevice {
         bool CopyDataFromCPU(void *dst, void *src, size_t size);
     };
 
-    class CudaLayerNormOp : BaseOperator {
-        bool CanRun(const std::string &opType, const DataDict &datas, const FloatDict &floatParams, const IntDict &intParams);
-        void Run(const std::string &opType, const DataDict &datas, const FloatDict &floatParams, const IntDict &intParams);
-    };
-
     class CudaRMSNormOp : BaseOperator {
         void Run(const std::string &opType, const DataDict &datas, const FloatDict &floatParams, const IntDict &intParams);
     };

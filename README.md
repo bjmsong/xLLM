@@ -2,7 +2,7 @@
 
 ![running](./data/.mp4)(压缩时长！1M左右最好, 录屏时把shell字体放大)
 
-llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，代码量<4k行，提供单元测试。
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
 
 目前支持以下优化策略：
 | 优化手段       | 减少显存 | 减少访存 | 减少计算 | 加快访存 | 加快计算 |

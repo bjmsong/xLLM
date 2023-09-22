@@ -368,8 +368,8 @@ namespace xllm {
         RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
         Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
         Linear(hiddenStates, weight["lm_head.weight"], logits);
-        
         logits.ToDevice(DataDevice::CPU);
+        
         // 采样
         int lastRet = -1;
         int base = logits.dims[1] - 1;

@@ -5,17 +5,28 @@ void *xllmCudaMalloc(size_t size);
 void xllmCudaFree(void *ret);
 void xllmCudaCopyFromHostToDevice(void *dst, void *src, size_t size);
 void xllmCudaCopyFromDeviceToHost(void *dst, void *src, size_t size);
-void *xllmCudaPrepareInput(const fastllm::Data &input);
-void xllmCudaFinishInput(const fastllm::Data &input, void *data);
+void *xllmCudaPrepareInput(const xllm::Data &input);
+void xllmCudaFinishInput(const xllm::Data &input, void *data);
 void xllmCudaSetDevice(int gpu_id);
+void xllmCudaMemcpy2DDeviceToDevice(void * 	dst, size_t 	dpitch, const void * 	src,
+                                       size_t 	spitch, size_t 	width, size_t 	height);
 
-bool xllmCudaSilu(const Data &input, Data &output);
-bool xllmCudaSoftmax(const Data &input, Data &output, int axis);
-bool xllmCudaAddTo(Data &input0, const Data &input1, float alpha);
-bool xllmCudaMulTo(Data &input0, const Data &input1, float alpha);
-bool xllmCudaAttentionMask(Data &input, const Data &mask, float maskValue);
-bool xllmCudaRMSNorm(const Data &input, Data &weight, Data &output, float eps);
-bool xllmCudaLayerNorm(const Data &input, Data &gamma, Data &beta, Data &output, int axis);
-bool xllmCudaPermute(Data &input, const std::vector<int> &axis);
-bool xllmCudaMatMulFloatInt8(const Data &input, Data &weight, const Data &bias, Data &output, int n, int m, int k);
-bool xllmCudaMatMulFloat16(const Data &input, Data &weight, const Data &bias, Data &output, int n, int m, int k);
+bool xllmCudaRMSNorm(const xllm::Data &input, xllm::Data &weight, xllm::Data &output, float eps);
+bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xllm::Data &bias, xllm::Data &output, int n, int m, int k);
+bool xllmCudaLlamaRotatePosition2D(xllm::Data &data, const xllm::Data &positionIds,
+                                      const xllm::Data &sinData, const xllm::Data &cosData, int rotaryDim);
+bool xllmCudaPermute(xllm::Data &input, const std::vector<int> &axis);
+bool xllmCudaBatchMatMulTransB(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
+                              int input0Spatial, int input1Spatial, int outputSpatial,
+                              int input0Stride, int input1Stride,
+                              int batch, int n, int m, int k, float alpha);
+bool xllmCudaAttentionMask(xllm::Data &input, const xllm::Data &mask, float maskValue);
+bool xllmCudaSoftmax(const xllm::Data &input, xllm::Data &output, int axis);
+bool xllmCudaBatchMatMul(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
+                                  int input0Spatial, int input1Spatial, int outputSpatial,
+                                  int input0Stride, int input1Stride,
+                                  int batch, int n, int m, int k, float alpha);
+bool xllmCudaAddTo(xllm::Data &input0, const xllm::Data &input1, float alpha);
+
+bool xllmCudaSilu(const xllm::Data &input, xllm::Data &output);
+bool xllmCudaMulTo(xllm::Data &input0, const xllm::Data &input1, float alpha);

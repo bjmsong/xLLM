@@ -146,6 +146,5 @@ namespace xllm {
                 break;
             }
         }
-        curExecutor->SetFirstDevice(curDevice);
     }
 }
