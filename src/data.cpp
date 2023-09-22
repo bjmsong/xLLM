@@ -64,7 +64,49 @@ namespace xllm{
         if (this->dataType == DataType::INT32PARAM) {
             return;
         }
-        return;
+
+        if (this->dataDevice == device) {
+            return;
+        }
+
+#ifdef USE_CUDA
+        if (this->assignBytes != 0) {
+            if (this->dataDevice == DataDevice::CPU) {
+                if (device == DataDevice::CUDA) {
+                    FastllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
+                    this->cudaData = FastllmCudaMalloc(expansionBytes);
+                    FastllmCudaCopyFromHostToDevice(this->cudaData, this->cpuData, expansionBytes);
+                    delete[] this->cpuData;
+                    this->cpuData = nullptr;
+                }
+            } else if (this->dataDevice == DataDevice::CUDA) {
+                if (device == DataDevice::CPU) {
+                    this->cpuData = new uint8_t[expansionBytes];
+                    FastllmCudaCopyFromDeviceToHost(this->cpuData, this->cudaData, expansionBytes);
+                    FastllmCudaFree(this->cudaData);
+                    this->cudaData = nullptr;
+                } else if (device == DataDevice::CUDA) {
+                    FastllmCudaSetDevice(this->dataDeviceIds.size() == 0 ? 0 : this->dataDeviceIds[0]);
+                    uint8_t *cpuData = new uint8_t[expansionBytes];
+                    FastllmCudaCopyFromDeviceToHost(cpuData, this->cudaData, expansionBytes);
+                    FastllmCudaFree(this->cudaData);
+
+                    FastllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
+                    this->cudaData = FastllmCudaMalloc(expansionBytes);
+
+                    FastllmCudaCopyFromHostToDevice(this->cudaData, cpuData, expansionBytes);
+                    delete[] cpuData;
+                }
+            }
+        }
+#endif
+
+        if (deviceIds.size() == 0) {
+            this->dataDeviceIds = {0};
+        } else {
+            this->dataDeviceIds = deviceIds;
+        };
+        this->dataDevice = device;
     }
 
     void Data::Allocate() {
@@ -88,6 +130,8 @@ namespace xllm{
     }
 
     void Data::FreeSpace() {
+        assignBytes = 0;
+        expandBytes = 0;
         delete[] cpuData;
     }
 

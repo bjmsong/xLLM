@@ -1,9 +1,16 @@
 #include "executor.h"
 #include "cpu/cpudevice.h"
 
+#ifdef USE_CUDA
+#include "cuda/cudadevice.h"
+#endif
+
 namespace xllm {
     Executor::Executor() {
         this->devices.clear();
+#ifdef USE_CUDA
+        this->devices.push_back((BaseDevice*) new CudaDevice());
+#endif
         this->devices.push_back((BaseDevice*) new CpuDevice());
     }
 

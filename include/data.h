@@ -116,7 +116,8 @@ class Data {
 
         uint8_t *cpuData = nullptr; // 数据指针
         void *cudaData = nullptr;
-        void *deviceData = nullptr;
+        DataDevice dataDevice = DataDevice::CPU;  // 标记当前数据在哪个设备上
+        std::vector <int> dataDeviceIds;
         
         // 量化相关的参数
         int perChannelAxis = -1; // 沿哪个轴分通道量化，-1代表没有分通道

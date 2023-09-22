@@ -30,6 +30,7 @@ namespace xllm {
         sinData.CopyFrom(Data(DataType::FLOAT32, {(int)sin.size(), (int)sin[0].size()}, fsin));
         cosData.CopyFrom(Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos));
         
+        deviceMap = GetDeviceMap();
         WarmUp();
     }
 
@@ -263,6 +264,7 @@ namespace xllm {
 
         Embedding(inputIds, weight["model.embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < params.block_cnt; i++) {
+            ApplyDeviceMap(this->deviceMap, i + 1, params.block_cnt);
             RMSNorm(hiddenStates, weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
             std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
@@ -297,6 +299,9 @@ namespace xllm {
 
             Data &pastKey = pastKeyValues[i].first, &pastValue = pastKeyValues[i].second;
             int unitLen = 64;   // 每次扩容的seq_len是unitLen的倍数
+#ifdef USE_CUDA
+                unitLen = 128;
+#endif
             while ((pastKey.dims.size() == 0 && (pastKey.expandDims.size() == 0 || k.dims[1] > pastKey.expandDims[1]))
                    || (pastKey.dims.size() > 0 && pastKey.dims[1] + k.dims[1] > pastKey.expandDims[1])) {
                 std::vector <int> newDims;
@@ -363,7 +368,8 @@ namespace xllm {
         RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
         Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
         Linear(hiddenStates, weight["lm_head.weight"], logits);
-
+        
+        logits.ToDevice(DataDevice::CPU);
         // 采样
         int lastRet = -1;
         int base = logits.dims[1] - 1;
@@ -405,6 +411,7 @@ namespace xllm {
 
         Embedding(inputIds, this->weight["model.embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < params.block_cnt; i++) {
+            ApplyDeviceMap(this->deviceMap, i + 1, params.block_cnt);
             RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
             std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
@@ -440,6 +447,9 @@ namespace xllm {
 
             Data &pastKey = pastKeyValues[i].first, &pastValue = pastKeyValues[i].second;
             int unitLen = 64;
+#ifdef USE_CUDA
+                unitLen = 128;
+#endif
             while ((pastKey.dims.size() == 0 && (pastKey.expandDims.size() == 0 || k.dims[1] > pastKey.expandDims[1]))
                    || (pastKey.dims.size() > 0 && pastKey.dims[1] + k.dims[1] > pastKey.expandDims[1])) {
                 std::vector <int> newDims;
@@ -498,6 +508,7 @@ namespace xllm {
         RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
         Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
         Linear(hiddenStates, weight["lm_head.weight"], logits);
+        logits.ToDevice(DataDevice::CPU);
 
         std::vector <int> lastRet;
         if (generationConfig.IsSimpleGreedy()) {

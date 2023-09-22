@@ -72,8 +72,7 @@ namespace xllm {
         std::vector<std::vector<float> > sin, cos;
         Data sinData, cosData;
 
-        std::thread *mainLoop = nullptr;
-        std::mutex mainLoopLocker, dictLocker;
+        std::map <std::string, int> deviceMap;
 
         LlamaModel (const std::string &weightPath, const std::string &tokenPath);
         

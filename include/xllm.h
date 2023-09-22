@@ -15,7 +15,9 @@ namespace xllm {
     int GetThreads();
     ThreadPool *GetPool();
     void PrintProfiler();
-    
+    std::map <std::string, int> GetDeviceMap();  // 用于多卡部署
+    void ApplyDeviceMap(const std::map <std::string, int> &deviceMap, int current, int total);
+
     class Data;
 
     struct GenerationConfig {

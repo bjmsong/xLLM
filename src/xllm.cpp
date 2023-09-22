@@ -4,6 +4,7 @@
 namespace xllm {
     static int threads = 4;
     static ThreadPool *xllmThreadPool = new ThreadPool(threads);
+    std::map <std::string, int> defaultDeviceMap;
     Executor defaultExecutor;
     Executor *curExecutor = &defaultExecutor;
 
@@ -122,5 +123,29 @@ namespace xllm {
 
     void PrintProfiler() {
         curExecutor->PrintProfiler();
+    }
+
+    std::map <std::string, int> GetDeviceMap() {
+        return defaultDeviceMap;
+    }
+
+    void ApplyDeviceMap(const std::map <std::string, int> &deviceMap, int current, int total) {
+        if (deviceMap.size() == 0) {
+            return;
+        }
+        int sum = 0, cur = 0;
+        for (auto &it : deviceMap) {
+            sum += it.second;
+        }
+        std::string curDevice = deviceMap.begin()->first;
+        for (auto &it : deviceMap) {
+            cur += it.second;
+            // current / total <= cur / sum
+            if (current * sum <= cur * total) {
+                curDevice = it.first;
+                break;
+            }
+        }
+        curExecutor->SetFirstDevice(curDevice);
     }
 }
