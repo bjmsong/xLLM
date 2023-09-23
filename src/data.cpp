@@ -141,17 +141,37 @@ namespace xllm{
     void Data::FreeSpace() {
         assignBytes = 0;
         expandBytes = 0;
-        delete[] cpuData;
+        if (this->dataDevice == DataDevice::CPU) {
+            delete[] this->cpuData;
+        } else if (this->dataDevice == DataDevice::CUDA) {
+#ifdef USE_CUDA
+            xllmCudaFree(this->cudaData);
+#else
+            ErrorInXLLM("Error: cuda is not supported.\n");
+#endif
+        }
     }
 
     void Data::MallocSpace(uint64_t bytes) {
-        cpuData = new uint8_t[bytes];
-        
+        if (this->dataDevice == DataDevice::CPU) {
+            this->cpuData = new uint8_t[this->bytes];
+        } else if (this->dataDevice == DataDevice::CUDA) {
+#ifdef USE_CUDA
+            this->cudaData = xllmCudaMalloc(this->bytes);
+#else
+            ErrorInXLLM("Error: cuda is not supported.\n");
+#endif
+        }
         assignBytes = bytes;
     }
 
     Data::~Data() {
         delete[] this->cpuData;
+#ifdef USE_CUDA
+        if (this->cudaData != nullptr) {
+            xllmCudaFree(this->cudaData);
+        }
+#endif
     }
 
     Data::Data(const Data &ori) {

@@ -450,10 +450,10 @@ bool xllmCudaBatchMatMulTransB(const xllm::Data &input0, const xllm::Data &input
     float *cudaInput1 = (float *) xllmCudaPrepareInput(input1);
     float *cudaOutput = (float *) xllmCudaPrepareOutput(output);
     float beta = 0;
-    auto fastllmCublasHandle = getxllmCublasHandle();
+    auto xllmCublasHandle = getxllmCublasHandle();
     cublasStatus_t status;
 
-    status = cublasSgemmStridedBatched(fastllmCublasHandle,
+    status = cublasSgemmStridedBatched(xllmCublasHandle,
                                        CUBLAS_OP_T, CUBLAS_OP_N,
                                        k, n, m, &alpha,
                                        cudaInput1, input1Stride, input1Spatial,
@@ -605,10 +605,10 @@ bool xllmCudaBatchMatMul(const xllm::Data &input0, const xllm::Data &input1, xll
     float *cudaInput1 = (float *) xllmCudaPrepareInput(input1);
     float *cudaOutput = (float *) xllmCudaPrepareOutput(output);
     float beta = 0;
-    auto fastllmCublasHandle = getxllmCublasHandle();
+    auto xllmCublasHandle = getxllmCublasHandle();
     cublasStatus_t status;
 
-    status = cublasSgemmStridedBatched(fastllmCublasHandle,
+    status = cublasSgemmStridedBatched(xllmCublasHandle,
                                        CUBLAS_OP_N, CUBLAS_OP_N,
                                        k, n, m, &alpha,
                                        cudaInput1, input1Stride, input1Spatial,
