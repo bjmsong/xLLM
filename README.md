@@ -1,6 +1,6 @@
 ## 介绍
 
-![running](./data/XLLM.mp4)
+![running](./data/XLLM.gif)
 
 llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
 
