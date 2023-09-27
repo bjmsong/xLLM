@@ -490,7 +490,8 @@ namespace xllm {
         Data &input0 = *(datas.find("input0")->second);
         Data &input1 = *(datas.find("input1")->second);
         int axis = intParams.find("axis") != intParams.end() ? intParams.find("axis")->second : -1;
-
+        input0.assignBytes += input1.assignBytes;
+        
         AssertInXLLM((input0.dataType == DataType::FLOAT32 && input1.dataType == DataType::FLOAT32) ||
                         (input0.dataType == DataType::FLOAT16 && input1.dataType == DataType::FLOAT16),
                         "CatDirect's input's type should be float32.\n");

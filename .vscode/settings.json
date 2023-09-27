@@ -5,6 +5,8 @@
         // 增加项目自身头文件依赖路径，因为使用vs2019编译不会生成compile_command.json文件，项目自己的头文件就不会找到
         "-I${workspaceFolder}", // 项目根目录
         "-I${workspaceFolder}/include",
+        "-I${workspaceFolder}/include/cpu",
+        "-I${workspaceFolder}/include/cuda",
         "-I/usr/lib/llvm-10/include/c++/v1",
         "-I/usr/local/cuda-11.8/targets/x86_64-linux/include",
         "-I/usr/local/include/c++/11.2.0",

@@ -4,6 +4,17 @@
 
 #include "cuda/xllm-cuda.cuh"
 
+// #define CHECK(call)
+// {
+//     const cudaError_t error = call;
+//     if (error != cudaSuccess)
+//     { 
+//         printf("Error: %s:%d, ", __FILE__, __LINE__);
+//         printf("code:%d, reason: %s\n", error, cudaGetErrorString(error));
+//         exit(1);
+//     }
+// }
+
 static std::map<int, cublasHandle_t> s_xllmCublasHandleMap;
 cublasHandle_t getxllmCublasHandle() {
     int id = -1;
@@ -14,6 +25,7 @@ cublasHandle_t getxllmCublasHandle() {
     }
     cublasHandle_t handler = nullptr;
     auto stat = cublasCreate(&handler);
+    // cudaDeviceSynchronize();
 
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("CUBLAS initialization failed:%d\n", stat);
@@ -65,6 +77,10 @@ void * xllmCudaMalloc(size_t size) {
 
         void * ret;
         cudaMalloc(&ret, size);
+        // cudaError_t cudaStatus = cudaDeviceSynchronize();
+        // if (cudaStatus != cudaSuccess) {
+        //     fprintf(stderr, "cudaMalloc failed: %s\n", cudaGetErrorString(cudaStatus));
+        // }
         bigBuffers.push_back(CudaMemoryBuffer(ret, size, true));
         return ret;
     }
@@ -77,6 +93,10 @@ void * xllmCudaMalloc(size_t size) {
     }
     void * ret;
     cudaMalloc(&ret, size);
+    // cudaError_t cudaStatus = cudaDeviceSynchronize();
+    // if (cudaStatus != cudaSuccess) {
+    //     fprintf(stderr, "cudaMalloc failed: %s\n", cudaGetErrorString(cudaStatus));
+    // }
     cudaBuffers.push_back(CudaMemoryBuffer(ret, size, true));
     return ret;
 }
@@ -103,6 +123,27 @@ void xllmCudaFree(void *ret) {
     }
     cudaFree(ret);
 }
+
+void xllmCudaClearBigBuffer() {
+    int id = -1;
+    cudaGetDevice(&id);
+    for (auto &it : bigBuffersMap) {
+        auto &bigBuffers = it.second;
+        std::vector <CudaMemoryBuffer> temp;
+        for (int i = 0; i < bigBuffers.size(); i++) {
+            if (!bigBuffers[i].busy) {
+                cudaSetDevice(it.first);
+                cudaFree(bigBuffers[i].data);
+            } else {
+                temp.push_back(bigBuffers[i]);
+            }
+        }
+        bigBuffers.clear();
+        bigBuffers = temp;
+    }
+    cudaSetDevice(id);
+}
+
 
 void xllmCudaCopyFromHostToDevice(void *dst, void *src, size_t size) {
     cudaMemcpy(dst, src, size, cudaMemcpyHostToDevice);
@@ -144,12 +185,13 @@ void xllmCudaFinishOutput(xllm::Data &output, void *data) {
         cudaMemcpy(output.cpuData, data, output.assignBytes, cudaMemcpyDeviceToHost);
         xllmCudaFree(data);
     }
+    // cudaDeviceSynchronize();
 }
 
 void xllmCudaMemcpy2DDeviceToDevice(void * 	dst, size_t 	dpitch, const void * 	src,
                                        size_t 	spitch, size_t 	width, size_t 	height) {
     cudaMemcpy2D(dst, dpitch, src, spitch, width, height, cudaMemcpyDeviceToDevice);
-    //cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 template <int THREAD_PER_BLOCK>
@@ -284,7 +326,7 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
 
         __half h_alpha = __float2half_rn(1.0), h_beta = __float2half_rn(0.0);
         auto fastllmCublasHandle = getxllmCublasHandle();
-        //cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         cudaDataType_t AType = CUDA_R_16F, BType = CUDA_R_16F, CType = CUDA_R_16F, ComputeType = CUDA_R_16F;
         cublasStatus_t status;
 
@@ -311,7 +353,7 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
         xllmCudaHalf2FlotaKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaFp16Output, cudaOutput,
                                                                                            len);
         xllmCudaBiasKernel <<< n, 256 >>> (cudaOutput, (float*)weight.extraCudaData[0], k);
-        //cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
 
         xllmCudaFree(cudaFp16Input);
         xllmCudaFree(cudaFp16Output);
@@ -499,16 +541,19 @@ bool xllmCudaAttentionMask(xllm::Data &input, const xllm::Data &mask, float mask
     return true;
 }
 
+// callable from the device
 template <int THREAD_PER_BLOCK>
 __device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int channels) {
+    // 共享内存类型(__shared__), 同一个block中的线程之间可以共享
     __shared__ float sdata[THREAD_PER_BLOCK];
     __shared__ float maxV;
 
     // 1. 每个线程计算一部分
     unsigned int tid = threadIdx.x;
-    unsigned int per = (channels / THREAD_PER_BLOCK);
+    unsigned int per = (channels / THREAD_PER_BLOCK);  // 每个线程计算几个数据
     unsigned int id = threadIdx.x * per;
     unsigned int len = per;
+    // 最后一个线程把未能整除的数据一起计算
     if (tid == blockDim.x - 1) {
         len += (channels - per * THREAD_PER_BLOCK);
     }
@@ -560,6 +605,8 @@ __device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int cha
     }
 }
 
+// callable from the host
+// 一个block处理一个outer的数据
 template <int THREAD_PER_BLOCK>
 __global__ void xllmSoftmaxKernelInner1(float* input, float *output, int outer, int channels) {
     int o = blockIdx.x;
@@ -569,6 +616,9 @@ __global__ void xllmSoftmaxKernelInner1(float* input, float *output, int outer, 
 bool xllmCudaSoftmax(const xllm::Data &input, xllm::Data &output, int axis) {
     float *cudaInput = (float *) xllmCudaPrepareInput(input);
     float *cudaOutput = (float *) xllmCudaPrepareInput(output);
+
+    // float* hostData = (float*)malloc(input.assignBytes);
+    // cudaMemcpy(hostData, cudaInput, input.assignBytes, cudaMemcpyDeviceToHost);
 
     int dimsLen = input.dims.size();
     axis = (axis % dimsLen + dimsLen) % dimsLen;
@@ -580,7 +630,7 @@ bool xllmCudaSoftmax(const xllm::Data &input, xllm::Data &output, int axis) {
         if (channels < 8) {
             xllmSoftmaxKernelInner1 <1> <<< outer, 1 >>> (cudaInput, cudaOutput, outer, channels);
         } else if (channels < 64) {
-            xllmSoftmaxKernelInner1 <8> <<< outer, 8 >>> (cudaInput, cudaOutput, outer, channels);
+            xllmSoftmaxKernelInner1 <1> <<< outer, 1 >>> (cudaInput, cudaOutput, outer, channels);
         } else if (channels < 512) {
             xllmSoftmaxKernelInner1 <64> <<< outer, 64 >>> (cudaInput, cudaOutput, outer, channels);
         } else {
@@ -591,6 +641,9 @@ bool xllmCudaSoftmax(const xllm::Data &input, xllm::Data &output, int axis) {
         printf("softmax error.\n");
         exit(0);
     }
+
+    // float* hostDataOut = (float*)malloc(input.assignBytes);
+    // cudaMemcpy(hostDataOut, cudaOutput, input.assignBytes, cudaMemcpyDeviceToHost);
 
     xllmCudaFinishInput(input, cudaInput);
     xllmCudaFinishOutput(output, cudaOutput);

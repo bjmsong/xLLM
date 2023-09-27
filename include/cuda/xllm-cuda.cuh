@@ -3,6 +3,7 @@
 
 void *xllmCudaMalloc(size_t size);
 void xllmCudaFree(void *ret);
+void xllmCudaClearBigBuffer();
 void xllmCudaCopyFromHostToDevice(void *dst, void *src, size_t size);
 void xllmCudaCopyFromDeviceToHost(void *dst, void *src, size_t size);
 void *xllmCudaPrepareInput(const xllm::Data &input);

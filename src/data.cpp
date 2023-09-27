@@ -1,6 +1,9 @@
 #include "data.h"
 #include "device.h"
+
+#ifdef USE_CUDA
 #include "xllm-cuda.cuh"
+#endif
 
 namespace xllm{
 
@@ -79,33 +82,46 @@ namespace xllm{
         }
 
 #ifdef USE_CUDA
-        if (this->assignBytes != 0) {
+        if (this->expandBytes != 0) {
             if (this->dataDevice == DataDevice::CPU) {
                 if (device == DataDevice::CUDA) {
                     xllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
-                    this->cudaData = xllmCudaMalloc(assignBytes);
-                    xllmCudaCopyFromHostToDevice(this->cudaData, this->cpuData, assignBytes);
+                    this->cudaData = xllmCudaMalloc(expandBytes);
+                    xllmCudaCopyFromHostToDevice(this->cudaData, this->cpuData, expandBytes);
                     delete[] this->cpuData;
                     this->cpuData = nullptr;
                 }
             } else if (this->dataDevice == DataDevice::CUDA) {
                 if (device == DataDevice::CPU) {
-                    this->cpuData = new uint8_t[assignBytes];
-                    xllmCudaCopyFromDeviceToHost(this->cpuData, this->cudaData, assignBytes);
+                    this->cpuData = new uint8_t[expandBytes];
+                    xllmCudaCopyFromDeviceToHost(this->cpuData, this->cudaData, expandBytes);
                     xllmCudaFree(this->cudaData);
                     this->cudaData = nullptr;
                 } else if (device == DataDevice::CUDA) {
                     xllmCudaSetDevice(this->dataDeviceIds.size() == 0 ? 0 : this->dataDeviceIds[0]);
-                    uint8_t *cpuData = new uint8_t[assignBytes];
-                    xllmCudaCopyFromDeviceToHost(cpuData, this->cudaData, assignBytes);
+                    uint8_t *cpuData = new uint8_t[expandBytes];
+                    xllmCudaCopyFromDeviceToHost(cpuData, this->cudaData, expandBytes);
                     xllmCudaFree(this->cudaData);
 
                     xllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
-                    this->cudaData = xllmCudaMalloc(assignBytes);
+                    this->cudaData = xllmCudaMalloc(expandBytes);
 
-                    xllmCudaCopyFromHostToDevice(this->cudaData, cpuData, assignBytes);
+                    xllmCudaCopyFromHostToDevice(this->cudaData, cpuData, expandBytes);
                     delete[] cpuData;
                 }
+            }
+        } else {
+             if (this->dataDevice == DataDevice::CPU) {
+                xllmCudaSetDevice(deviceIds.size() == 0 ? 0 : deviceIds[0]);
+                this->cudaData = xllmCudaMalloc(assignBytes);
+                xllmCudaCopyFromHostToDevice(this->cudaData, this->cpuData, assignBytes);
+                delete[] this->cpuData;
+                this->cpuData = nullptr;
+            } else if (this->dataDevice == DataDevice::CUDA) {
+                this->cpuData = new uint8_t[assignBytes];
+                xllmCudaCopyFromDeviceToHost(this->cpuData, this->cudaData, assignBytes);
+                xllmCudaFree(this->cudaData);
+                this->cudaData = nullptr;
             }
         }
 #endif
@@ -122,6 +138,7 @@ namespace xllm{
         if(assignBytes<bytes){
             FreeSpace();
             MallocSpace(bytes);
+            assignBytes = bytes;
         }
     }
 
@@ -154,15 +171,14 @@ namespace xllm{
 
     void Data::MallocSpace(uint64_t bytes) {
         if (this->dataDevice == DataDevice::CPU) {
-            this->cpuData = new uint8_t[this->bytes];
+            this->cpuData = new uint8_t[bytes];
         } else if (this->dataDevice == DataDevice::CUDA) {
 #ifdef USE_CUDA
-            this->cudaData = xllmCudaMalloc(this->bytes);
+            this->cudaData = xllmCudaMalloc(bytes);
 #else
             ErrorInXLLM("Error: cuda is not supported.\n");
 #endif
         }
-        assignBytes = bytes;
     }
 
     Data::~Data() {
@@ -245,9 +261,10 @@ namespace xllm{
         }
         expandBytes = (expandCounts * unitSize - 1) / unitSizeDiv + 1;
 
-        // 还没有分配空间
+        // 如果还没有分配空间
         if (this->dims.size() == 0 || assignBytes == 0) {
             this->MallocSpace(expandBytes);
+            assignBytes = expandBytes;
             return;
         }
 
@@ -255,10 +272,6 @@ namespace xllm{
         for (int i = 0; i < dims.size(); i++) {
             AssertInXLLM(dims[i] == -1 || dims[i] >= this->dims[i], "Expansion error: real size should <= expansion size.\n");
         }
-
-        // 如果已分配空间，需要把原来的数据拷贝到新的空间
-        uint8_t *old = this->cpuData;
-        MallocSpace(expandBytes);
 
         // 要扩张哪一个维度
         int axis = -1;
@@ -269,14 +282,32 @@ namespace xllm{
             }
         }
 
-        int inputStride = this->Count(axis);
-        int outer = this->counts / inputStride;
-        for (int o = 0; o < outer; o++) {
-            memcpy(this->cpuData + o * inputStride/this->dims[axis]*dims[axis] * unitSize,
-                    old + o * inputStride * unitSize,
-                    inputStride * unitSize);
-        }
-        delete[] old;
+        // 把原来的数据拷贝到新的空间
+        if (this->dataDevice == DataDevice::CPU) {
+            uint8_t *old = this->cpuData;
+            MallocSpace(expandBytes);
+            int inputStride = this->Count(axis);
+            int outer = this->counts / inputStride;
+            for (int o = 0; o < outer; o++) {
+                memcpy(this->cpuData + o * inputStride/this->dims[axis]*dims[axis] * unitSize,
+                        old + o * inputStride * unitSize,
+                        inputStride * unitSize);
+            }
+            delete[] old;
+        } else if (this->dataDevice == DataDevice::CUDA) {
+#ifdef USE_CUDA
+                uint8_t *old = (uint8_t*)this->cudaData;
+                MallocSpace(expandBytes);
+                int inputStride = this->Count(axis);
+                int outer = this->counts / inputStride;
+                xllmCudaMemcpy2DDeviceToDevice((uint8_t*)this->cudaData, inputStride/this->dims[axis]*dims[axis] * unitSize,
+                                            (uint8_t*)old, inputStride * unitSize, inputStride * unitSize, outer);
+                xllmCudaFree(old);
+                xllmCudaClearBigBuffer();
+#else
+                ErrorInXLLM("Error: cuda is not supported.\n");
+#endif
+            }
     }
 
     void Data::CalcWeightSum() {

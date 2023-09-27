@@ -117,6 +117,8 @@ namespace xllm {
             }
             results.clear();
             
+            attentionMask.ToDevice(DataDevice::CPU);
+            positionIds.ToDevice(DataDevice::CPU);
             inputIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)ret}));
             attentionMask = Data();
             positionIds.CopyFrom(Data(DataType::FLOAT32, {1, 1}, {(float)len}));
@@ -234,6 +236,8 @@ namespace xllm {
                     vmasks[i * maxLen + j] = 1.0f;
                 }
             }
+            attentionMask.ToDevice(DataDevice::CPU);
+            positionIds.ToDevice(DataDevice::CPU);
             attentionMask.CopyFrom(Data(DataType::FLOAT32, {batch, 1, maxLen}, vmasks));
             inputIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, fret));
             positionIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, pids));
@@ -264,9 +268,10 @@ namespace xllm {
 
         Embedding(inputIds, weight["model.embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < params.block_cnt; i++) {
-            ApplyDeviceMap(this->deviceMap, i + 1, params.block_cnt);
+            // ApplyDeviceMap(this->deviceMap, i + 1, params.block_cnt);
             RMSNorm(hiddenStates, weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
+            // attenInput.ToDevice(DataDevice::CPU);
             std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
             std::string kWeightName = "model.layers." + std::to_string(i) + ".self_attn.k_proj.weight";
             std::string vWeightName = "model.layers." + std::to_string(i) + ".self_attn.v_proj.weight";
@@ -277,8 +282,11 @@ namespace xllm {
             k.Reshape(hiddenStates.dims);
             v.Reshape(hiddenStates.dims);
             Linear(attenInput, weight[qWeightName], q);
+            // q.ToDevice(DataDevice::CPU);
             Linear(attenInput, weight[kWeightName], k);
+            // k.ToDevice(DataDevice::CPU);
             Linear(attenInput, weight[vWeightName], v);
+            // v.ToDevice(DataDevice::CPU);
 
             std::vector <int> qkvSize = {bsz, seqlen, params.num_attention_heads, -1};
             q.Reshape(qkvSize);
@@ -286,6 +294,8 @@ namespace xllm {
 
             LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
             LlamaRotatePosition2D(k, positionIds, sinData, cosData, params.rotary_dim);
+            // q.ToDevice(DataDevice::CPU);
+            // k.ToDevice(DataDevice::CPU);
 
             qkvSize = {bsz * seqlen, params.num_attention_heads, -1};
             q.Reshape(qkvSize);
@@ -294,8 +304,11 @@ namespace xllm {
 
             std::vector<int> axisData = {1, 0, 2};
             PermuteSelf(q, axisData);
+            // q.ToDevice(DataDevice::CPU);
             PermuteSelf(k, axisData);
+            // k.ToDevice(DataDevice::CPU);
             PermuteSelf(v, axisData);
+            // v.ToDevice(DataDevice::CPU);
 
             Data &pastKey = pastKeyValues[i].first, &pastValue = pastKeyValues[i].second;
             int unitLen = 64;   // 每次扩容的seq_len是unitLen的倍数
@@ -326,46 +339,63 @@ namespace xllm {
             }
 
             CatDirect(pastKey, k, 1);
+            // pastKey.ToDevice(DataDevice::CPU);
             CatDirect(pastValue, v, 1);
-
+            // pastValue.ToDevice(DataDevice::CPU);
+            
             // 1.2 Attention
             // 1.2.0 q * k^T
             // q: {num_attention_heads, bsz * seqlen, hidden_size/num_attention_heads}
             // pastKey: {num_attention_heads, k_seqlen, hidden_size/num_attention_heads} 不同head之间的内存不连续
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
+            // attenWeights.ToDevice(DataDevice::CPU);
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
             if (attentionMask.dims.size() != 0) {
                 AttentionMask(attenWeights, attentionMask, -10000);
+                // attenWeights.ToDevice(DataDevice::CPU);
             }
 
             SoftMax(attenWeights, attenWeights, -1);
+            // attenWeights.ToDevice(DataDevice::CPU);
             // attenWeights: {1, num_attention_heads, bsz * seqlen, k_seqlen}
             // pastValue: {num_attention_heads, k_seqlen, hidden_size/num_attention_heads} 不同head之间的内存不连续
             // attenOutput: {1, num_attention_heads, bsz * seqlen, hidden_size/num_attention_heads}
             attenOutput.Reshape({1, params.num_attention_heads, bsz * seqlen, -1});
             MatMul(attenWeights, pastValue, attenOutput);
-
+            // attenOutput.ToDevice(DataDevice::CPU);
+            
             attenOutput.Reshape({attenOutput.dims[1], attenOutput.dims[2], attenOutput.dims[3]});
             PermuteSelf(attenOutput, axisData);
             // {bsz, seqLen, hidden_size}
             attenOutput.Reshape({bsz, seqlen, -1});
-
+            // attenOutput.ToDevice(DataDevice::CPU);
+            
             // weight[oWeightName]: {hidden_size, hidden_size}
             Linear(attenOutput, weight[oWeightName], attenLastOutput);
+            // attenLastOutput.ToDevice(DataDevice::CPU);
             AddTo(hiddenStates, attenLastOutput);
+            // hiddenStates.ToDevice(DataDevice::CPU);
 
             // 2. mlp
             RMSNorm(hiddenStates, weight["model.layers." + std::to_string(i) + ".post_attention_layernorm.weight"], attenInput, 1e-6);
+            // attenInput.ToDevice(DataDevice::CPU);
             Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.gate_proj.weight"],  w1);
+            // w1.ToDevice(DataDevice::CPU);
             Linear(attenInput, weight["model.layers." + std::to_string(i) + ".mlp.up_proj.weight"],  w3);
+            // w3.ToDevice(DataDevice::CPU);
             Silu(w1, w1);
+            // w1.ToDevice(DataDevice::CPU);
             MulTo(w1, w3);
+            // w1.ToDevice(DataDevice::CPU);
             Linear(w1, weight["model.layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
+            // w2.ToDevice(DataDevice::CPU);
             AddTo(hiddenStates, w2);
+            // hiddenStates.ToDevice(DataDevice::CPU);
         }
 
         RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
+        // hiddenStates.ToDevice(DataDevice::CPU);
         Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
         Linear(hiddenStates, weight["lm_head.weight"], logits);
         logits.ToDevice(DataDevice::CPU);

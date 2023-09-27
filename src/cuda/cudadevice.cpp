@@ -80,12 +80,13 @@ namespace xllm {
         AssertInXLLM(input0.dataDevice == input1.dataDevice, "CatDirect error: inputs should use same device.\n");
 
         if (input0.dims.size() == 0) {
+            input0.assignBytes = input1.assignBytes;
             input0.Resize(input1.dims);
             AssertInXLLM(input0.expandDims.size() == input1.dims.size() &&
                             input1.dims[axis] <= input0.expandDims[axis],
                             "CatDirect Error: input0's expansion size is not enough.\n");
             int outer = input1.Count(0) / input1.Count(axis);
-            int input0Stride = input0.Count(axis);
+            int input0Stride = input0.Count(axis) * input0.expandDims[axis]/input1.dims[axis];
             int input1Stride = input1.Count(axis);
             int inner = input0.strides[axis];
             int unitSize = input0.unitSize;
@@ -105,12 +106,13 @@ namespace xllm {
             }
         }
 
+        input0.assignBytes += input1.assignBytes;
         std::vector<int> dims = input0.dims;
         std::vector<int> oldDims = dims;
         dims[axis] += input1.dims[axis];
         input0.Resize(dims);
         int outer = input0.Count(0) / input0.Count(axis);
-        int input0Stride = input0.Count(axis);
+        int input0Stride = input0.expandDims[axis] * input0.expandDims[axis+1];
         int input1Stride = input1.Count(axis);
 
         int inner = input0.strides[axis];
@@ -132,7 +134,7 @@ namespace xllm {
 
         float alpha = floatParams.find("alpha") != floatParams.end() ? floatParams.find("alpha")->second : -1;
         int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.Count(input1.dims.size() - 2);
+        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];
         int input0Stride = input0.strides[input0.dims.size() - 2];
         int input1Stride = input1.strides[input1.dims.size() - 2];
         int n = input0.dims[input0.dims.size() - 2];
@@ -157,7 +159,7 @@ namespace xllm {
 
         float alpha = floatParams.find("alpha") != floatParams.end() ? floatParams.find("alpha")->second : -1;
         int input0Spatial = input0.Count(input0.dims.size() - 2);
-        int input1Spatial = input1.Count(input1.dims.size() - 2);
+        int input1Spatial = input1.dims.back() * input1.expandDims[input1.dims.size() - 2];
         int input0Stride = input0.strides[input0.dims.size() - 2];
         int input1Stride = input1.strides[input1.dims.size() - 2];
         int n = input0.dims[input0.dims.size() - 2];
