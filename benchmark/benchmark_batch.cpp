@@ -106,16 +106,15 @@ int main(int argc, char **argv) {
     model->ResponseBatch(input_tokens, outputs, [](int index, std::vector<std::string> &contents) {
         if (index != -1) {
             if (index == 0) {
-                promptTime = std::chrono::system_clock::now();
-            } else {
-                for (int i = 0; i < contents.size(); i++) {
-                    tokens += (contents[i].size() > 0);
-                }
+                promptTime = std::chrono::system_clock::now();   // prefill阶段结束，decoding阶段开始
+            } 
+            for (int i = 0; i < contents.size(); i++) {
+                tokens += (contents[i].size() > 0);
             }
         }
     }, generationConfig);
-    float promptSpend = xllm::GetSpan(st, promptTime);
-    float spend = xllm::GetSpan(promptTime, std::chrono::system_clock::now());
+    float promptSpend = xllm::GetSpan(st, promptTime);  // prefill阶段耗时
+    float spend = xllm::GetSpan(promptTime, std::chrono::system_clock::now());  // decoding阶段耗时
 
     if (config.output != "") {
         FILE *fo = fopen(config.output.c_str(), "w");

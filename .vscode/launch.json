@@ -62,7 +62,8 @@
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/build-cuda/benchmark_batch",
             "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat.bin",
-            "--token", "/root/autodl-tmp/tokenizer.bin", "--file", "${workspaceFolder}/benchmark/prompts.txt", "-t", "8"]
+            "--token", "/root/autodl-tmp/tokenizer.bin", "--file", "${workspaceFolder}/benchmark/prompts.txt", 
+            "-t", "32", "-l", "3"]
         }
     ]
 }
@@ -78,7 +79,7 @@
 //             "request": "launch",
 //             "name": "Debug",
 //             "cwd": "${workspaceFolder}",
-//             "program": "${workspaceFolder}/build/main",
+//             "program": "${workspaceFolder}/build-cuda/main",
 //             "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat.bin", 
 //             "--token","/root/autodl-tmp/tokenizer.bin", "--threads", "16"],
 //         }
