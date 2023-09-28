@@ -81,6 +81,7 @@ namespace xllm {
 
         if (input0.dims.size() == 0) {
             input0.assignBytes = input1.assignBytes;
+            input0.counts = input1.counts;
             input0.Resize(input1.dims);
             AssertInXLLM(input0.expandDims.size() == input1.dims.size() &&
                             input1.dims[axis] <= input0.expandDims[axis],
@@ -107,6 +108,7 @@ namespace xllm {
         }
 
         input0.assignBytes += input1.assignBytes;
+        input0.counts += input1.counts;
         std::vector<int> dims = input0.dims;
         std::vector<int> oldDims = dims;
         dims[axis] += input1.dims[axis];

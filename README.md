@@ -2,7 +2,7 @@
 
 ![running](./data/XLLM.gif)
 
-llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。在4090单卡上llama2-7b（FP16）推理速度可达2500 tokens/s。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
 
 目前支持以下优化策略：
 | 优化手段       | 减少显存 | 减少访存 | 减少计算 | 加快访存 | 加快计算 |
@@ -15,14 +15,6 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | 激活值显存复用 | ✅        |          |          |          |          |
 | GEMM优化       |          | ✅        | ✅        |          |          |
 
-
-## 吞吐量测试
-llama2-7B
-
-```bash
-./benchmark --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --threads 32
-./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32
-```
 
 ## 快速开始
 1. 导出模型
@@ -106,6 +98,13 @@ make -j4
 2. 推理INT8模型
 ```bash
 ./main --weight /pathto/llama2_7b_chat_int8.bin --token /pathto/tokenizer.bin --threads 32
+```
+
+## 吞吐量测试
+
+```bash
+./benchmark --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --threads 32
+./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32
 ```
 
 ## 单元测试
