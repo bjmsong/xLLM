@@ -1,4 +1,4 @@
 Who are you
-Can you tell me How to learn C
+Can you tell me how to learn C
 You are a helpful, respectful and honest assistant. What's the weather today?
 You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Write a brief birthday message to John.

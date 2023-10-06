@@ -11,6 +11,8 @@ void xllmCudaFinishInput(const xllm::Data &input, void *data);
 void xllmCudaSetDevice(int gpu_id);
 void xllmCudaMemcpy2DDeviceToDevice(void * 	dst, size_t 	dpitch, const void * 	src,
                                        size_t 	spitch, size_t 	width, size_t 	height);
+void xllmCudaMemcpy2DDeviceToDeviceFP16(void * 	dst, size_t 	dpitch, const void * 	src,
+                                       size_t 	spitch, size_t 	width, size_t 	height);
 
 bool xllmCudaRMSNorm(const xllm::Data &input, xllm::Data &weight, xllm::Data &output, float eps);
 bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xllm::Data &bias, xllm::Data &output, int n, int m, int k);
@@ -18,6 +20,10 @@ bool xllmCudaLlamaRotatePosition2D(xllm::Data &data, const xllm::Data &positionI
                                       const xllm::Data &sinData, const xllm::Data &cosData, int rotaryDim);
 bool xllmCudaPermute(xllm::Data &input, const std::vector<int> &axis);
 bool xllmCudaBatchMatMulTransB(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
+                              int input0Spatial, int input1Spatial, int outputSpatial,
+                              int input0Stride, int input1Stride,
+                              int batch, int n, int m, int k, float alpha);
+bool xllmCudaBatchMatMulTransBFP16(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
                               int input0Spatial, int input1Spatial, int outputSpatial,
                               int input0Stride, int input1Stride,
                               int batch, int n, int m, int k, float alpha);

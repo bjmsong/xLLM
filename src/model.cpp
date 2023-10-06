@@ -180,7 +180,7 @@ namespace xllm {
 
         std::vector <std::pair <Data, Data> > pastKeyValues;
         for (int i = 0; i < params.block_cnt; i++) {
-            pastKeyValues.push_back(std::make_pair(Data(DataType::FLOAT32),
+            pastKeyValues.push_back(std::make_pair(Data(DataType::FLOAT16),
                                                    Data(DataType::FLOAT32)));
         }
 
@@ -447,7 +447,6 @@ namespace xllm {
             std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
             std::string kWeightName = "model.layers." + std::to_string(i) + ".self_attn.k_proj.weight";
             std::string vWeightName = "model.layers." + std::to_string(i) + ".self_attn.v_proj.weight";
-            std::string qkvWeightName = "model.layers." + std::to_string(i) + ".self_attn.W_pack.weight";
             std::string oWeightName = "model.layers." + std::to_string(i) + ".self_attn.o_proj.weight";
 
             // 1.1 Get q, k, v
@@ -503,19 +502,40 @@ namespace xllm {
                 pastValue.Expansion(newDims);
             }
 
-            CatDirect(pastKey, k, 1);
+            // struct FP16ToFP32Manager {
+            //     float dict[65536];  // 2^16
+
+            //     FP16ToFP32Manager() {
+            //         for (uint16_t i = 0; i < 65535; i++) {
+            //             dict[i] = half_to_float(i);
+            //         }
+            //     }
+            // } fp16tofp32;
+            
+            // k.ToDevice(DataDevice::CPU);
+            // pastKey.ToDevice(DataDevice::CPU);
+            // uint16_t *pastKeyData = (uint16_t *) pastKey.cpuData;
+            CatDirectFP16(pastKey, k, 1);
+            // pastKey.ToDevice(DataDevice::CPU);
+            // pastKeyData = (uint16_t *) pastKey.cpuData;
+
             CatDirect(pastValue, v, 1);
 
             // 1.2 Attention
             // 1.2.0 q * k^T
-            // TODO: 一次性分配好空间
+            // q.ToDevice(DataDevice::CPU);
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
-            MatMulTransB(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
+            MatMulTransBFP16(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
+            // attenWeights.ToDevice(DataDevice::CPU);
+            // pastKey.ToDevice(DataDevice::CPU);
+            // pastKeyData = (uint16_t *) pastKey.cpuData;
+
             attenWeights.Reshape({1, attenWeights.dims[0], attenWeights.dims[1], attenWeights.dims[2]});
             if (attentionMask.dims.size() != 0) {
                 AttentionMask(attenWeights, attentionMask, -10000);
             }
             SoftMax(attenWeights, attenWeights, -1);
+            // attenWeights.ToDevice(DataDevice::CPU);
             attenOutput.Reshape({bsz*params.num_attention_heads, seqlen, -1});
             MatMul(attenWeights, pastValue, attenOutput);
 
@@ -533,6 +553,7 @@ namespace xllm {
             MulTo(w1, w3);
             Linear(w1, weight["model.layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
             AddTo(hiddenStates, w2);
+            // hiddenStates.ToDevice(DataDevice::CPU);
         }
 
         RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);

@@ -75,6 +75,18 @@ namespace xllm {
         }, {}, {{"axis", axis}});
     }
 
+    void CatDirectFP16(Data &input0, const Data &input1, int axis) {
+        curExecutor->Run("CatDirectFP16", {
+                {"input0", (Data*)&input0}, {"input1", (Data*)&input1}
+        }, {}, {{"axis", axis}});
+    }
+
+    void MatMulTransBFP16(const Data &input0, const Data &input1, Data &output, float alpha) {
+        curExecutor->Run("MatMulTransBFP16", {
+                {"input0", (Data*)&input0}, {"input1", (Data*)&input1}, {"output", &output}
+        }, {{"alpha", alpha}}, {});
+    }
+
     void MatMulTransB(const Data &input0, const Data &input1, Data &output, float alpha) {
         curExecutor->Run("MatMulTransB", {
                 {"input0", (Data*)&input0}, {"input1", (Data*)&input1}, {"output", &output}

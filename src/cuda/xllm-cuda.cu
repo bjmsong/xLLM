@@ -64,7 +64,7 @@ void * xllmCudaMalloc(size_t size) {
         int selId = -1;
         for (int i = 0; i < bigBuffers.size(); i++) {
             if (bigBuffers[i].size >= size && !bigBuffers[i].busy
-                && bigBuffers[i].size - size < 32 * 1024 * 1024) {
+                && bigBuffers[i].size - size < 8 * 1024 * 1024) {
                 if (selId == -1 || bigBuffers[selId].size > bigBuffers[i].size) {
                     selId = i;
                 }
@@ -188,6 +188,46 @@ void xllmCudaFinishOutput(xllm::Data &output, void *data) {
     // cudaDeviceSynchronize();
 }
 
+__global__ void xllmCudaFloat2HalfKernel(float* a, half *b, int len) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < len) {
+        b[idx] = __float2half(a[idx]);
+    }
+}
+
+__global__ void xllmCudaHalf2FlotaKernel(half* a, float *b, int len) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < len) {
+        b[idx] = __half2float(a[idx]);
+    }
+}
+
+void xllmCudaMemcpy2DDeviceToDeviceFP16(void * 	dst, size_t 	dpitch, const void * 	src,
+                                       size_t 	spitch, size_t 	width, size_t 	height) {
+    int len = width * height / 2;
+    int threadPerBlock = std::min(256, len);
+    half *cudaFp16Input = (half *) xllmCudaMalloc(len * 2);
+    xllmCudaFloat2HalfKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock>>>((float*) src, cudaFp16Input,
+                                                                                        len);                                   
+    // cudaError_t status = cudaDeviceSynchronize();
+    // if (status != cudaSuccess)
+    // { 
+    //     printf("Error: %s:%d, ", __FILE__, __LINE__);
+    //     printf("code:%d, reason: %s\n", status, cudaGetErrorString(status));
+    //     exit(1);
+    // }
+
+    cudaMemcpy2D(dst, dpitch, cudaFp16Input, spitch, width, height, cudaMemcpyDeviceToDevice);
+    // status = cudaDeviceSynchronize();
+    // if (status != cudaSuccess)
+    // { 
+    //     printf("Error: %s:%d, ", __FILE__, __LINE__);
+    //     printf("code:%d, reason: %s\n", status, cudaGetErrorString(status));
+    //     exit(1);
+    // }
+    xllmCudaFree(cudaFp16Input);
+}
+
 void xllmCudaMemcpy2DDeviceToDevice(void * 	dst, size_t 	dpitch, const void * 	src,
                                        size_t 	spitch, size_t 	width, size_t 	height) {
     cudaMemcpy2D(dst, dpitch, src, spitch, width, height, cudaMemcpyDeviceToDevice);
@@ -252,20 +292,6 @@ bool xllmCudaRMSNorm(const xllm::Data &input, xllm::Data &weight, xllm::Data &ou
     xllmCudaFinishInput(input, cudaInput);
     xllmCudaFinishOutput(output, cudaOutput);
     return true;
-}
-
-__global__ void xllmCudaFloat2HalfKernel(float* a, half *b, int len) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < len) {
-        b[idx] = __float2half(a[idx]);
-    }
-}
-
-__global__ void xllmCudaHalf2FlotaKernel(half* a, float *b, int len) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < len) {
-        b[idx] = __half2float(a[idx]);
-    }
 }
 
 __global__ void xllmCudaBiasKernel(float *a, float *bias, int k) {
@@ -513,6 +539,46 @@ bool xllmCudaBatchMatMulTransB(const xllm::Data &input0, const xllm::Data &input
     xllmCudaFinishInput(input0, cudaInput0);
     xllmCudaFinishInput(input1, cudaInput1);
     xllmCudaFinishOutput(output, cudaOutput);
+    return true;
+}
+
+bool xllmCudaBatchMatMulTransBFP16(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
+                                  int input0Spatial, int input1Spatial, int outputSpatial,
+                                  int input0Stride, int input1Stride,
+                                  int batch, int n, int m, int k, float alpha) {
+    float *cudaInput0 = (float *) xllmCudaPrepareInput(input0);
+    float *cudaOutput = (float *) xllmCudaPrepareOutput(output);
+    float beta = 0;
+
+    half *cudaInput1FP16 = (half *) xllmCudaPrepareInput(input1);
+    int len = input1Spatial * batch;
+    float *cudaInput1 = (float*) xllmCudaMalloc(len * sizeof(float));
+    int threadPerBlock = std::min(256, len);
+    xllmCudaHalf2FlotaKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput1FP16, cudaInput1, len);
+
+    auto xllmCublasHandle = getxllmCublasHandle();
+    cublasStatus_t status;
+
+    status = cublasSgemmStridedBatched(xllmCublasHandle,
+                                       CUBLAS_OP_T, CUBLAS_OP_N,
+                                       k, n, m, &alpha,
+                                       cudaInput1, input1Stride, input1Spatial,
+                                       cudaInput0, input0Stride, input0Spatial,
+                                       &beta,
+                                       cudaOutput, k, k * n, batch);
+    if (status != CUBLAS_STATUS_SUCCESS) {
+        printf("status = %d\n", (int)status);
+        printf("%d %d %d\n", k, n, m);
+        printf("Error: cublas error.\n");
+        throw("cublas error");
+        exit(0);
+    }
+
+    xllmCudaFree(cudaInput1);
+    xllmCudaFinishInput(input0, cudaInput0);
+    xllmCudaFinishInput(input1, cudaInput1FP16);
+    xllmCudaFinishOutput(output, cudaOutput);
+    
     return true;
 }
 
