@@ -1,6 +1,7 @@
 #include <map>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include "nvtx3/nvToolsExt.h" 
 
 #include "cuda/xllm-cuda.cuh"
 
@@ -546,26 +547,40 @@ bool xllmCudaBatchMatMulTransBFP16(const xllm::Data &input0, const xllm::Data &i
                                   int input0Spatial, int input1Spatial, int outputSpatial,
                                   int input0Stride, int input1Stride,
                                   int batch, int n, int m, int k, float alpha) {
+    nvtxRangePush("MatMulTransBFP16");
     float *cudaInput0 = (float *) xllmCudaPrepareInput(input0);
     float *cudaOutput = (float *) xllmCudaPrepareOutput(output);
     float beta = 0;
-
     half *cudaInput1FP16 = (half *) xllmCudaPrepareInput(input1);
-    int len = input1Spatial * batch;
-    float *cudaInput1 = (float*) xllmCudaMalloc(len * sizeof(float));
-    int threadPerBlock = std::min(256, len);
-    xllmCudaHalf2FloatKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput1FP16, cudaInput1, len);
+
+    // int len = input1Spatial * batch;
+    // float *cudaInput1 = (float*) xllmCudaMalloc(len * sizeof(float));
+    // int threadPerBlock = std::min(256, len);
+    // xllmCudaHalf2FloatKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput1FP16, cudaInput1, len);
+
+    half* cudaInput0FP16 = (half*) xllmCudaMalloc(input0.counts * sizeof(half));
+    half* cudaOutputFP16 = (half*) xllmCudaMalloc(output.counts * sizeof(half));
+    int threadPerBlock = std::min(256, input0.counts);
+    xllmCudaFloat2HalfKernel <<< (input0.counts - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput0, cudaInput0FP16, input0.counts);
 
     auto xllmCublasHandle = getxllmCublasHandle();
     cublasStatus_t status;
 
-    status = cublasSgemmStridedBatched(xllmCublasHandle,
-                                       CUBLAS_OP_T, CUBLAS_OP_N,
-                                       k, n, m, &alpha,
-                                       cudaInput1, input1Stride, input1Spatial,
-                                       cudaInput0, input0Stride, input0Spatial,
-                                       &beta,
-                                       cudaOutput, k, k * n, batch);
+    // status = cublasSgemmStridedBatched(xllmCublasHandle,
+    //                                    CUBLAS_OP_T, CUBLAS_OP_N,
+    //                                    k, n, m, &alpha,
+    //                                    cudaInput1, input1Stride, input1Spatial,
+    //                                    cudaInput0, input0Stride, input0Spatial,
+    //                                    &beta,
+    //                                    cudaOutput, k, k * n, batch);
+    __half h_alpha = __float2half_rn(alpha), h_beta = __float2half_rn(beta);
+    status = cublasHgemmStridedBatched(xllmCublasHandle,
+                                    CUBLAS_OP_T, CUBLAS_OP_N,
+                                    k, n, m, &h_alpha,
+                                    cudaInput1FP16, input1Stride, input1Spatial,
+                                    cudaInput0FP16, input0Stride, input0Spatial,
+                                    &h_beta,
+                                    cudaOutputFP16, k, k * n, batch);                           
     if (status != CUBLAS_STATUS_SUCCESS) {
         printf("status = %d\n", (int)status);
         printf("%d %d %d\n", k, n, m);
@@ -574,11 +589,16 @@ bool xllmCudaBatchMatMulTransBFP16(const xllm::Data &input0, const xllm::Data &i
         exit(0);
     }
 
-    xllmCudaFree(cudaInput1);
+    threadPerBlock = std::min(256, output.counts);
+    xllmCudaHalf2FloatKernel <<< (output.counts - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaOutputFP16, cudaOutput, output.counts);
+
+    xllmCudaFree(cudaInput0FP16);
+    xllmCudaFree(cudaOutputFP16);
     xllmCudaFinishInput(input0, cudaInput0);
     xllmCudaFinishInput(input1, cudaInput1FP16);
     xllmCudaFinishOutput(output, cudaOutput);
     
+    nvtxRangePop();
     return true;
 }
 
