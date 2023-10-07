@@ -2,7 +2,7 @@
 
 ![running](./data/XLLM.gif)
 
-llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。在4090单卡上llama2-7b（FP16）推理速度可达3000 tokens/s。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。在4090单卡上llama2-7b（FP16）推理速度可达5000+ tokens/s。支持batch推理，流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
 
 目前支持以下优化策略：
 | 优化手段       | 减少显存 | 减少访存 | 减少计算 | 加快访存 | 加快计算 |
