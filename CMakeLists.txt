@@ -15,6 +15,7 @@ if (USE_CUDA)
     enable_language(CUDA)
     add_compile_definitions(USE_CUDA)  #  添加预处理宏：USE_CUDA
     # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G")
+    add_compile_options(-ldl)
     include_directories(include/cuda)
     message(${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
     set(XLLM_CUDA_SOURCES src/cuda/cudadevice.cpp src/cuda/xllm-cuda.cu)
