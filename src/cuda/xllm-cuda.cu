@@ -195,7 +195,7 @@ __global__ void xllmCudaFloat2HalfKernel(float* a, half *b, int len) {
     }
 }
 
-__global__ void xllmCudaHalf2FlotaKernel(half* a, float *b, int len) {
+__global__ void xllmCudaHalf2FloatKernel(half* a, float *b, int len) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx < len) {
         b[idx] = __half2float(a[idx]);
@@ -376,7 +376,7 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
         }
 
         len = n * k;
-        xllmCudaHalf2FlotaKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaFp16Output, cudaOutput,
+        xllmCudaHalf2FloatKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaFp16Output, cudaOutput,
                                                                                            len);
         xllmCudaBiasKernel <<< n, 256 >>> (cudaOutput, (float*)weight.extraCudaData[0], k);
         // cudaDeviceSynchronize();
@@ -554,7 +554,7 @@ bool xllmCudaBatchMatMulTransBFP16(const xllm::Data &input0, const xllm::Data &i
     int len = input1Spatial * batch;
     float *cudaInput1 = (float*) xllmCudaMalloc(len * sizeof(float));
     int threadPerBlock = std::min(256, len);
-    xllmCudaHalf2FlotaKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput1FP16, cudaInput1, len);
+    xllmCudaHalf2FloatKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput1FP16, cudaInput1, len);
 
     auto xllmCublasHandle = getxllmCublasHandle();
     cublasStatus_t status;
