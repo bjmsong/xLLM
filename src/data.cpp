@@ -303,7 +303,7 @@ namespace xllm{
                 xllmCudaMemcpy2DDeviceToDevice((uint8_t*)this->cudaData, inputStride/this->dims[axis]*dims[axis] * unitSize,
                                             (uint8_t*)old, inputStride * unitSize, inputStride * unitSize, outer);
                 xllmCudaFree(old);
-                xllmCudaClearBigBuffer();
+                // xllmCudaClearBigBuffer();
 #else
                 ErrorInXLLM("Error: cuda is not supported.\n");
 #endif
@@ -369,6 +369,37 @@ namespace xllm{
                     }
                 }
             }
+        }
+    }
+
+    void Data::removeBatch(int d, int batch){
+        if (dataDevice == DataDevice::CPU){
+            for (int i = d; i < batch-1; i++)
+                memcpy(cpuData + i*bytes/batch, cpuData + (i+1)*bytes/batch, bytes/batch);
+            bytes -= bytes/batch;
+            counts -= strides[0];
+            dims[0]--;
+        } else {
+            uint8_t *old = (uint8_t*)this->cudaData;
+            float shrink = (float)(batch-1)/batch;
+            expandBytes *= shrink;
+            int strideBytes = expandDims[1] * expandDims[2] * dims[0]/batch * unitSize;
+#ifdef USE_CUDA
+            this->cudaData = xllmCudaMalloc(expandBytes);
+            for (int i = 0; i < d; i++)
+                xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
+                old + i*strideBytes, strideBytes);
+            for (int i = d; i < batch-1; i++)
+                xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
+                old + (i+1)*strideBytes, strideBytes);
+            xllmCudaFree(old);
+            xllmCudaClearBigBuffer();
+#endif            
+            dims[0] *= shrink;
+            counts *= shrink;
+            expandDims[0] *= shrink;
+            expandCounts *= shrink;
+            assignBytes *= shrink;
         }
     }    
 }

@@ -57,6 +57,10 @@ namespace xllm {
                 units[i].Init(lastN);
             }
         }
+
+        void removeBatch(int i) {
+            units.erase(units.begin() + i);
+        }
     };
 
     class LlamaModel {
@@ -118,5 +122,11 @@ namespace xllm {
         
         int sample_top_p(uint8_t* probs, const GenerationConfig& generationConfig);
 
+        void printProfiler() {
+            printf("Sampling spend %f \n", profiler);
+        };
+
+    private:
+        float profiler;
     };
 }

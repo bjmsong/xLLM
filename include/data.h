@@ -161,5 +161,7 @@ class Data {
         void Print() const; // 输出
 
         void CalcWeightSum(); // 计算WeightSum
+
+        void removeBatch(int d, int batch);
     };
 }

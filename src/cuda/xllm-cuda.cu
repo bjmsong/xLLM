@@ -154,6 +154,10 @@ void xllmCudaCopyFromDeviceToHost(void *dst, void *src, size_t size) {
     cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
 }
 
+void xllmCudaCopyFromDeviceToDevice(void *dst, void *src, size_t size) {
+    cudaMemcpy(dst, src, size, cudaMemcpyDeviceToDevice);
+}
+
 void *xllmCudaPrepareInput(const xllm::Data &input) {
     void *ret;
     if (input.dataDevice == xllm::DataDevice::CUDA) {
@@ -390,6 +394,7 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
 
     xllmCudaFinishInput(input, cudaInput);
     xllmCudaFinishOutput(output, cudaOutput);
+    // cudaDeviceSynchronize();
     return true;
 }
 

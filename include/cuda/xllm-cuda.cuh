@@ -6,6 +6,8 @@ void xllmCudaFree(void *ret);
 void xllmCudaClearBigBuffer();
 void xllmCudaCopyFromHostToDevice(void *dst, void *src, size_t size);
 void xllmCudaCopyFromDeviceToHost(void *dst, void *src, size_t size);
+void xllmCudaCopyFromDeviceToDevice(void *dst, void *src, size_t size);
+
 void *xllmCudaPrepareInput(const xllm::Data &input);
 void xllmCudaFinishInput(const xllm::Data &input, void *data);
 void xllmCudaSetDevice(int gpu_id);

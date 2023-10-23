@@ -4,7 +4,7 @@
 namespace xllm {
 
     LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): 
-        weight(weightPath), tokenizer(tokenPath) {      
+        weight(weightPath), tokenizer(tokenPath), profiler(0.f) {      
         
         sin.resize(params.max_positions);
         cos.resize(params.max_positions);
@@ -155,7 +155,7 @@ namespace xllm {
         std::vector <float> vpids = std::vector <float> (batch * maxLen, 0);
         std::vector <float> vmask = std::vector <float> (batch * maxLen * maxLen, 0);
         for (int i = 0; i < batch; i++) {
-            int len = inputTokens[i].counts, base = maxLen - len;
+            int len = seqLens[i], base = maxLen - len;
             for (int j = 0; j < len; j++) {
                 ids[i * maxLen + base + j] = ((float*)inputTokens[i].cpuData)[j];
                 vpids[i * maxLen + base + j] = j;
@@ -185,33 +185,44 @@ namespace xllm {
         }
 
         std::string retString = "";
-        std::vector <int> lens = seqLens;
-        std::vector <bool> isEnding = std::vector <bool> (batch, false);
-        std::vector <float> results;
-        int index = 0;
+        // std::vector <bool> isEnding = std::vector <bool> (batch, false);
+        int index = 0;  // 用来区分prefill和decode
 
         LastTokensManager tokensManager (batch, generationConfig.last_n);
         while (true) {
-            auto st = std::chrono::system_clock::now();
+            // auto st = std::chrono::system_clock::now();
+            // int endingCount = 0;
             std::vector <int> ret = ForwardBatch(batch, inputIds, attentionMask, positionIds, pastKeyValues,
                                                  generationConfig, tokensManager);
+            attentionMask.ToDevice(DataDevice::CPU);
+            positionIds.ToDevice(DataDevice::CPU);
             for (int i = 0; i < batch; i++) {
                 tokensManager.units[i].Push(ret[i]);
             }
             std::vector <float> fret;
             std::vector <float> results;
-            int endingCount = 0;
             std::vector <std::string> curStrings;
-            for (int i = 0; i < batch; i++) {
-                fret.push_back(ret[i]);
+            int batch_origin = batch;
+            for (int i = 0; i < batch_origin; i++) {
+
                 if (ret[i] == tokenizer.eos_id) {
-                    isEnding[i] = true;
-                }
-                if (isEnding[i]) {
-                    curStrings.push_back("");
-                    endingCount++;
+                    seqLens.erase(seqLens.begin() + i);
+                    tokensManager.removeBatch(i);
+                    printf("[ model output: \"%s\"]\n", outputs[i].c_str());
+                    outputs.erase(outputs.begin() + i);
+                    inputIds.removeBatch(i, batch);
+                    positionIds.removeBatch(i, batch);
+                    attentionMask.removeBatch(i, batch);
+                    for (int block = 0; block < params.block_cnt; block++) {
+                        pastKeyValues[block].first.removeBatch(i, batch);
+                        pastKeyValues[block].second.removeBatch(i, batch);
+                    }
+                    batch--;
                     continue;
                 }
+
+                fret.push_back(ret[i]);
+                
                 results.push_back(ret[i]);
                 std::string curString = tokenizer.Decode(Data(DataType::FLOAT32, {(int)results.size()}, results));
                 outputs[i] += curString;
@@ -219,28 +230,29 @@ namespace xllm {
                 results.clear();
             }
 
-            if (endingCount == batch) {
+            if (batch == 0) {
                 break;
             }
+
             if (retCb) 
                 retCb(index, curStrings);
-            index++;
 
+            index++;
             maxLen++;
+            
             std::vector <float> pids = std::vector <float> (batch);
             std::vector <float> vmasks = std::vector <float> (batch * maxLen, 0.0f);
             for (int i = 0; i < batch; i++) {
-                pids[i] = lens[i];
-                lens[i]++;
-                for (int j = 0; j < maxLen - lens[i]; j++) {
+                pids[i] = seqLens[i];
+                seqLens[i]++;
+                for (int j = 0; j < maxLen - seqLens[i]; j++) {
                     vmasks[i * maxLen + j] = 1.0f;
                 }
             }
-            attentionMask.ToDevice(DataDevice::CPU);
-            positionIds.ToDevice(DataDevice::CPU);
             attentionMask.CopyFrom(Data(DataType::FLOAT32, {batch, 1, maxLen}, vmasks));
-            inputIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, fret));
             positionIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, pids));
+            inputIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, fret));
+
             if (index == generationConfig.output_token_limit) {
                 break;
             }
@@ -562,6 +574,7 @@ namespace xllm {
         logits.ToDevice(DataDevice::CPU);
 
         std::vector <int> lastRet;
+        auto st = std::chrono::system_clock::now();
         if (generationConfig.IsSimpleGreedy()) {
             for (int b = 0; b < batch; b++) {
                 int base = b * logits.dims[1] + logits.dims[1] - 1;
@@ -577,6 +590,8 @@ namespace xllm {
                 lastRet.push_back(TOPKSampling(logits, base, generationConfig, lastTokens.units[b]));
             }
         }
+        float spend = GetSpan(st, std::chrono::system_clock::now());
+        profiler += spend;
 
         return lastRet;
     }
