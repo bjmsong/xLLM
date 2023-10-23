@@ -10,6 +10,7 @@ struct BenchmarkConfig {
     int batch = -1; // batch数, -1时使用文件中的行数作为batch
     std::string file; // 输入文件
     std::string output; // 输出文件，如果不设定则输出到屏幕
+    int top_k = 1;
 };
 
 void Usage() {
@@ -20,6 +21,7 @@ void Usage() {
     std::cout << "<-t|--threads> <args>:        使用的线程数量" << std::endl;
     std::cout << "<-l|--limit> <args>:          输出token数限制" << std::endl;
     std::cout << "<-b|--batch> <args>:          batch数"      << std::endl;
+    std::cout << "<--topk> <args>:          tokp number"      << std::endl;
     std::cout << "<-f|--file> <args>:           输入文件，文件中每行一个prompt，如果行数不足batch则用之前的prompt补充"      << std::endl;
 }
 
@@ -37,7 +39,9 @@ void ParseArgs(int argc, char **argv, BenchmarkConfig &config) {
             config.weightPath = sargv[++i];
         } else if (sargv[i] == "--token") {
             config.tokenPath = sargv[++i];
-        }  else if (sargv[i] == "-t" || sargv[i] == "--threads") {
+        } else if (sargv[i] == "--topk") {
+            config.top_k = atoi(sargv[++i].c_str());
+        } else if (sargv[i] == "-t" || sargv[i] == "--threads") {
             config.threads = atoi(sargv[++i].c_str());
         } else if (sargv[i] == "-l" || sargv[i] == "--limit") {
             config.limit = atoi(sargv[++i].c_str());
@@ -62,6 +66,7 @@ int main(int argc, char **argv) {
 
     xllm::GenerationConfig generationConfig;
     generationConfig.output_token_limit = config.limit;
+    generationConfig.top_k = config.top_k;
     xllm::PrintInstructionInfo();
 
     std::vector <std::string> inputs;
@@ -133,5 +138,7 @@ int main(int argc, char **argv) {
     printf("prompt use %f s\n", promptSpend);
     printf("prompt speed = %f tokens / s\n", (float)promptTokenNum / promptSpend);
     printf("output %d tokens\nuse %f s\nspeed = %f tokens / s\n", tokens, spend, tokens / spend);
+    // xllm::PrintProfiler();
+    // model->printProfiler();
     return 0;
 }
