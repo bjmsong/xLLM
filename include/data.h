@@ -162,6 +162,6 @@ class Data {
 
         void CalcWeightSum(); // 计算WeightSum
 
-        void removeBatch(int d, int batch);
+        void removeBatch(std::vector<int> removedBatch, int batch);
     };
 }

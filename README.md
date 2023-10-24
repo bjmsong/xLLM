@@ -10,13 +10,13 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | CUDA           |          |          |          | ✅        | ✅        |
 | 动态KV Cache   | ✅        |          | ✅        |          |          |
 | 权重量化       | ✅        | ✅        |          |          |          |
-| KV Cache量化   | ✅        | ✅       |          |          |          |
+| KV Cache量化   | ✅        | ✅        |          |          |          |
+| 动态Batch      |          |          |          |          |          |
 | SIMD           |          |          |          |          | ✅        |
 | 多线程         |          |          |          |          | ✅        |
 | 激活值显存复用 | ✅        |          |          |          |          |
 | GEMM优化       |          | ✅        | ✅        |          |          |
 | 显存池         |          |          |          |          |          |
-| 动态batch         |          |          |          |          |          |
 
 
 ## 性能测试

@@ -198,6 +198,8 @@ namespace xllm {
             std::vector <float> fret;
             std::vector <float> results;
             std::vector <std::string> curStrings;
+            std::vector<int> removedBatch;
+            int origin_batch = batch;
             for (int i = 0; i < batch; i++) {
 
                 if (ret[i] == tokenizer.eos_id) {
@@ -205,11 +207,10 @@ namespace xllm {
                     ret.erase(ret.begin() + i);
                     printf("[ model output: \"%s\"]\n", outputs[i].c_str());
                     outputs.erase(outputs.begin() + i);
-                    for (int block = 0; block < params.block_cnt; block++) {
-                        pastKeyValues[block].first.removeBatch(i, batch);
-                        pastKeyValues[block].second.removeBatch(i, batch);
-                    }
+                    removedBatch.push_back(i);
                     batch--;
+                    i--;
+                    continue;
                 }
 
                 fret.push_back(ret[i]);
@@ -224,6 +225,13 @@ namespace xllm {
 
             if (batch == 0) {
                 break;
+            }
+
+            if (removedBatch.size()>0) {
+                for (int block = 0; block < params.block_cnt; block++) {
+                    pastKeyValues[block].first.removeBatch(removedBatch, origin_batch);
+                    pastKeyValues[block].second.removeBatch(removedBatch, origin_batch);
+                }
             }
 
             for (int i = 0; i < batch; i++) {

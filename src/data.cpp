@@ -372,26 +372,40 @@ namespace xllm{
         }
     }
 
-    void Data::removeBatch(int d, int batch){
+    void Data::removeBatch(std::vector<int> removedBatch, int batch){
         if (dataDevice == DataDevice::CPU){
-            for (int i = d; i < batch-1; i++)
-                memcpy(cpuData + i*bytes/batch, cpuData + (i+1)*bytes/batch, bytes/batch);
-            bytes -= bytes/batch;
-            counts -= strides[0];
-            dims[0]--;
+            // for (int i = d; i < batch-1; i++)
+            //     memcpy(cpuData + i*bytes/batch, cpuData + (i+1)*bytes/batch, bytes/batch);
+            // bytes -= bytes/batch;
+            // counts -= strides[0];
+            // dims[0]--;
         } else {
             uint8_t *old = (uint8_t*)this->cudaData;
-            float shrink = (float)(batch-1)/batch;
+            int removedBatchNum = removedBatch.size();
+            float shrink = (float)(batch-removedBatchNum)/batch;
             expandBytes *= shrink;
             int strideBytes = expandDims[1] * expandDims[2] * dims[0]/batch * unitSize;
+            std::vector<int> remainBatch;
+            std::vector<int> batchVetor;
+            for (int i = 0; i < batch; ++i) {
+                batchVetor.push_back(i);
+            }
+            for (int x : batchVetor) {
+                if (std::find(removedBatch.begin(), removedBatch.end(), x) == removedBatch.end()) {
+                    remainBatch.push_back(x);
+                }
+            }
 #ifdef USE_CUDA
             this->cudaData = xllmCudaMalloc(expandBytes);
-            for (int i = 0; i < d; i++)
+            for (int i = 0; i < batch-removedBatchNum; i++)
                 xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
-                old + i*strideBytes, strideBytes);
-            for (int i = d; i < batch-1; i++)
-                xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
-                old + (i+1)*strideBytes, strideBytes);
+                old + remainBatch[i]*strideBytes, strideBytes);
+            // for (int i = 0; i < d; i++)
+            //     xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
+            //     old + i*strideBytes, strideBytes);
+            // for (int i = d; i < batch-1; i++)
+            //     xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
+            //     old + (i+1)*strideBytes, strideBytes);
             xllmCudaFree(old);
             xllmCudaClearBigBuffer();
 #endif            
