@@ -1,9 +1,7 @@
 #include "data.h"
 #include "device.h"
 
-#ifdef USE_CUDA
-#include "xllm-cuda.cuh"
-#endif
+#include "cuda/xllm-cuda.cuh"
 
 namespace xllm{
 
@@ -380,7 +378,7 @@ namespace xllm{
             // counts -= strides[0];
             // dims[0]--;
         } else {
-            uint8_t *old = (uint8_t*)this->cudaData;
+            void *old = this->cudaData;
             int removedBatchNum = removedBatch.size();
             float shrink = (float)(batch-removedBatchNum)/batch;
             expandBytes *= shrink;
@@ -397,15 +395,8 @@ namespace xllm{
             }
 #ifdef USE_CUDA
             this->cudaData = xllmCudaMalloc(expandBytes);
-            for (int i = 0; i < batch-removedBatchNum; i++)
-                xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
-                old + remainBatch[i]*strideBytes, strideBytes);
-            // for (int i = 0; i < d; i++)
-            //     xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
-            //     old + i*strideBytes, strideBytes);
-            // for (int i = d; i < batch-1; i++)
-            //     xllmCudaCopyFromDeviceToDevice((uint8_t*)cudaData + i*strideBytes, 
-            //     old + (i+1)*strideBytes, strideBytes);
+            xllmCudaCopyFromDeviceToDevice(remainBatch.size(), strideBytes,
+                cudaData, old, remainBatch);
             xllmCudaFree(old);
             xllmCudaClearBigBuffer();
 #endif            

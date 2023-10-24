@@ -1,3 +1,5 @@
+#include <cuda_runtime_api.h>
+#include <driver_types.h>
 #include <map>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -156,6 +158,33 @@ void xllmCudaCopyFromDeviceToHost(void *dst, void *src, size_t size) {
 
 void xllmCudaCopyFromDeviceToDevice(void *dst, void *src, size_t size) {
     cudaMemcpy(dst, src, size, cudaMemcpyDeviceToDevice);
+}
+
+void xllmCudaCopyFromDeviceToDevice(int n, int strideBytes, void *dst, void *src, 
+        std::vector<int> remainBatch) {
+
+    for (int i = 0; i < n; i++){
+        cudaMemcpy((uint8_t*)dst + i*strideBytes, 
+        (uint8_t*)src + remainBatch[i]*strideBytes, strideBytes, cudaMemcpyDeviceToDevice);
+    }
+}
+
+void xllmCudaCopyFromDeviceToDeviceStream(int n, int strideBytes, void *dst, void *src, 
+        std::vector<int> remainBatch) {
+    std::vector<cudaStream_t> streams(n);
+    for (int i = 0; i < n; ++i) {
+        cudaStreamCreate(&streams[i]);
+    }
+    for (int i = 0; i < n; i++){
+        cudaMemcpyAsync((uint8_t*)dst + i*strideBytes, 
+        (uint8_t*)src + remainBatch[i]*strideBytes, strideBytes, cudaMemcpyDeviceToDevice, streams[i]);
+    }
+    for (int i = 0; i < n; i++) {
+        cudaStreamSynchronize(streams[i]);
+    }
+    for (int i = 0; i < n; ++i) {
+        cudaStreamDestroy(streams[i]);
+    }
 }
 
 void *xllmCudaPrepareInput(const xllm::Data &input) {

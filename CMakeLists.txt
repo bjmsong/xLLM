@@ -27,10 +27,13 @@ endif()
 set(XLLM_CXX_SOURCES src/param.cpp src/data.cpp src/xllm.cpp src/model.cpp
     src/cpu/cpudevice.cpp src/executor.cpp src/device.cpp)
 
+find_package(OpenMP)
+add_compile_options(-Wunknown-pragmas)
+
 include_directories(include)
 include_directories(include/cpu)
 add_library(xllm OBJECT ${XLLM_CXX_SOURCES} ${XLLM_CUDA_SOURCES})
-target_link_libraries(xllm PUBLIC ${XLLM_LINKED_LIBS})
+target_link_libraries(xllm PUBLIC ${XLLM_LINKED_LIBS} OpenMP::OpenMP_CXX)
 
 add_executable(main main.cpp)
 target_link_libraries(main xllm)

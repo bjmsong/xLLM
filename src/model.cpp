@@ -185,13 +185,11 @@ namespace xllm {
         }
 
         std::string retString = "";
-        // std::vector <bool> isEnding = std::vector <bool> (batch, false);
         int index = 0;  // 用来区分prefill和decode
 
         LastTokensManager tokensManager (batch, generationConfig.last_n);
         while (true) {
             // auto st = std::chrono::system_clock::now();
-            // int endingCount = 0;
             std::vector <int> ret = ForwardBatch(batch, inputIds, attentionMask, positionIds, pastKeyValues,
                                                  generationConfig, tokensManager);
 
@@ -222,24 +220,26 @@ namespace xllm {
                 results.clear();
             }
 
+            if (retCb) 
+                retCb(index, curStrings);
 
             if (batch == 0) {
                 break;
             }
 
             if (removedBatch.size()>0) {
+                auto st = std::chrono::system_clock::now();
+                // #pragma omp parallel for
                 for (int block = 0; block < params.block_cnt; block++) {
                     pastKeyValues[block].first.removeBatch(removedBatch, origin_batch);
                     pastKeyValues[block].second.removeBatch(removedBatch, origin_batch);
                 }
+                printf("removeBatch spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
             }
-
+            
             for (int i = 0; i < batch; i++) {
                 tokensManager.units[i].Push(ret[i]);
             }
-
-            if (retCb) 
-                retCb(index, curStrings);
 
             index++;
             maxLen++;
