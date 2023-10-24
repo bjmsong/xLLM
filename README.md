@@ -16,6 +16,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | 激活值显存复用 | ✅        |          |          |          |          |
 | GEMM优化       |          | ✅        | ✅        |          |          |
 | 显存池         |          |          |          |          |          |
+| 动态batch         |          |          |          |          |          |
 
 
 ## 性能测试

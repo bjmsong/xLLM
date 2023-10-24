@@ -195,9 +195,6 @@ namespace xllm {
             std::vector <int> ret = ForwardBatch(batch, inputIds, attentionMask, positionIds, pastKeyValues,
                                                  generationConfig, tokensManager);
 
-            for (int i = 0; i < batch; i++) {
-                tokensManager.units[i].Push(ret[i]);
-            }
             std::vector <float> fret;
             std::vector <float> results;
             std::vector <std::string> curStrings;
@@ -206,7 +203,6 @@ namespace xllm {
                 if (ret[i] == tokenizer.eos_id) {
                     seqLens.erase(seqLens.begin() + i);
                     ret.erase(ret.begin() + i);
-                    tokensManager.removeBatch(i);
                     printf("[ model output: \"%s\"]\n", outputs[i].c_str());
                     outputs.erase(outputs.begin() + i);
                     for (int block = 0; block < params.block_cnt; block++) {
@@ -225,8 +221,13 @@ namespace xllm {
                 results.clear();
             }
 
+
             if (batch == 0) {
                 break;
+            }
+
+            for (int i = 0; i < batch; i++) {
+                tokensManager.units[i].Push(ret[i]);
             }
 
             if (retCb) 

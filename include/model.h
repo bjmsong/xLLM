@@ -57,10 +57,6 @@ namespace xllm {
                 units[i].Init(lastN);
             }
         }
-
-        void removeBatch(int i) {
-            units.erase(units.begin() + i);
-        }
     };
 
     class LlamaModel {
