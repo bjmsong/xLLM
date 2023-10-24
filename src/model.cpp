@@ -194,31 +194,26 @@ namespace xllm {
             // int endingCount = 0;
             std::vector <int> ret = ForwardBatch(batch, inputIds, attentionMask, positionIds, pastKeyValues,
                                                  generationConfig, tokensManager);
-            attentionMask.ToDevice(DataDevice::CPU);
-            positionIds.ToDevice(DataDevice::CPU);
+
             for (int i = 0; i < batch; i++) {
                 tokensManager.units[i].Push(ret[i]);
             }
             std::vector <float> fret;
             std::vector <float> results;
             std::vector <std::string> curStrings;
-            int batch_origin = batch;
-            for (int i = 0; i < batch_origin; i++) {
+            for (int i = 0; i < batch; i++) {
 
                 if (ret[i] == tokenizer.eos_id) {
                     seqLens.erase(seqLens.begin() + i);
+                    ret.erase(ret.begin() + i);
                     tokensManager.removeBatch(i);
                     printf("[ model output: \"%s\"]\n", outputs[i].c_str());
                     outputs.erase(outputs.begin() + i);
-                    inputIds.removeBatch(i, batch);
-                    positionIds.removeBatch(i, batch);
-                    attentionMask.removeBatch(i, batch);
                     for (int block = 0; block < params.block_cnt; block++) {
                         pastKeyValues[block].first.removeBatch(i, batch);
                         pastKeyValues[block].second.removeBatch(i, batch);
                     }
                     batch--;
-                    continue;
                 }
 
                 fret.push_back(ret[i]);
@@ -249,6 +244,8 @@ namespace xllm {
                     vmasks[i * maxLen + j] = 1.0f;
                 }
             }
+            attentionMask.ToDevice(DataDevice::CPU);
+            positionIds.ToDevice(DataDevice::CPU);
             attentionMask.CopyFrom(Data(DataType::FLOAT32, {batch, 1, maxLen}, vmasks));
             positionIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, pids));
             inputIds.CopyFrom(Data(DataType::FLOAT32, {batch, 1}, fret));
