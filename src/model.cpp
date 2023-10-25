@@ -205,7 +205,7 @@ namespace xllm {
                     ret.erase(ret.begin() + i);
                     printf("[ model output: \"%s\"]\n", outputs[i].c_str());
                     outputs.erase(outputs.begin() + i);
-                    removedBatch.push_back(i);
+                    removedBatch.push_back(i + removedBatch.size());
                     batch--;
                     i--;
                     continue;

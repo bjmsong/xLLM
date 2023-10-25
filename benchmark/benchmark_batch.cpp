@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         fclose(fo);
     } else {
         for (int i = 0; i < outputs.size(); i++) {
-            printf("[ user: \"%s\", model: \"%s\"]\n", inputs[i].c_str(), outputs[i].c_str());
+            printf("[ model: \"%s\"]\n", outputs[i].c_str());
         }
     }
 
