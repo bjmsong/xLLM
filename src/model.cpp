@@ -228,13 +228,13 @@ namespace xllm {
             }
 
             if (removedBatch.size()>0) {
-                auto st = std::chrono::system_clock::now();
+                // auto st = std::chrono::system_clock::now();
                 // #pragma omp parallel for
                 for (int block = 0; block < params.block_cnt; block++) {
                     pastKeyValues[block].first.removeBatch(removedBatch, origin_batch);
                     pastKeyValues[block].second.removeBatch(removedBatch, origin_batch);
                 }
-                printf("removeBatch spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
+                // printf("removeBatch spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
             }
             
             for (int i = 0; i < batch; i++) {

@@ -301,7 +301,7 @@ namespace xllm{
                 xllmCudaMemcpy2DDeviceToDevice((uint8_t*)this->cudaData, inputStride/this->dims[axis]*dims[axis] * unitSize,
                                             (uint8_t*)old, inputStride * unitSize, inputStride * unitSize, outer);
                 xllmCudaFree(old);
-                // xllmCudaClearBigBuffer();
+                xllmCudaClearBigBuffer();
 #else
                 ErrorInXLLM("Error: cuda is not supported.\n");
 #endif
@@ -378,7 +378,7 @@ namespace xllm{
             // counts -= strides[0];
             // dims[0]--;
         } else {
-            void *old = this->cudaData;
+            // void *old = this->cudaData;
             int removedBatchNum = removedBatch.size();
             float shrink = (float)(batch-removedBatchNum)/batch;
             expandBytes *= shrink;
@@ -394,11 +394,11 @@ namespace xllm{
                 }
             }
 #ifdef USE_CUDA
-            this->cudaData = xllmCudaMalloc(expandBytes);
+            // this->cudaData = xllmCudaMalloc(expandBytes);
             xllmCudaCopyFromDeviceToDevice(remainBatch.size(), strideBytes,
-                cudaData, old, remainBatch);
-            xllmCudaFree(old);
-            xllmCudaClearBigBuffer();
+                cudaData, cudaData, remainBatch);
+            // xllmCudaFree(old);
+            // xllmCudaClearBigBuffer();
 #endif            
             dims[0] *= shrink;
             counts *= shrink;
