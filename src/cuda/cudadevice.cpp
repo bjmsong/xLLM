@@ -18,6 +18,8 @@ namespace xllm {
         this->ops["AddTo"] = (BaseOperator*)(new CudaAddToOp());
         this->ops["Silu"] = (BaseOperator*)(new CudaSiluOp());
         this->ops["MulTo"] = (BaseOperator*)(new CudaMulToOp());
+        this->ops["TopK"] = (BaseOperator*)(new CudaTopKOp());
+        this->ops["Split"] = (BaseOperator*)(new CudaSplitOp());
     }
 
     bool CudaDevice::Malloc(void **ret, size_t size) {
@@ -366,5 +368,51 @@ namespace xllm {
         int rotaryDim = intParams.find("rotaryDim") != intParams.end() ? intParams.find("rotaryDim")->second : 128;
 
         xllmCudaLlamaRotatePosition2D(data, positionIds, sinData, cosData, rotaryDim);
+    }
+
+    bool CudaTopKOp::CanRun(const std::string &opType, const xllm::DataDict &datas,
+                            const xllm::FloatDict &floatParams, const xllm::IntDict &intParams) {
+        int topk = intParams.find("topk") != intParams.end() ? intParams.find("topk")->second : 1;
+        if (topk != 1) {
+            return false;
+        }
+        return true;
+    }
+
+    void CudaTopKOp::Run(const std::string &opType, const xllm::DataDict &datas,
+                        const xllm::FloatDict &floatParams, const xllm::IntDict &intParams) {
+        Data &input = *(datas.find("input")->second);
+        Data &output = *(datas.find("output")->second);
+        output.Allocate();
+        int topk = intParams.find("topk") != intParams.end() ? intParams.find("topk")->second : -1;
+        xllmCudaTopK(input, output, topk);
+    }
+
+    void CudaSplitOp::Run(const std::string &opType, const xllm::DataDict &datas,
+                          const xllm::FloatDict &floatParams, const xllm::IntDict &intParams) {
+        Data &input = *(datas.find("input")->second);
+        Data &output = *(datas.find("output")->second);
+
+        output.Allocate();
+
+        int axis = intParams.find("axis") != intParams.end() ? intParams.find("axis")->second : -1;
+        int start = intParams.find("start") != intParams.end() ? intParams.find("start")->second : 0;
+        int end = intParams.find("end") != intParams.end() ? intParams.find("end")->second : 0;
+
+        int dimsLen = input.dims.size();
+        axis = (axis % dimsLen + dimsLen) % dimsLen;
+        start = std::max(0, std::min(input.dims[axis] - 1, start));
+        end = std::max(0, std::min(input.dims[axis], end));
+
+        int outer = input.Count(0) / input.Count(axis);
+        int inputStride = input.Count(axis);
+        int outputStride = output.Count(axis);
+        int channels = input.dims[axis];
+        int inner = input.strides[axis];
+        int unitSize = input.unitSize;
+
+        xllmCudaMemcpy2DDeviceToDevice((uint8_t*)output.cudaData, outputStride * unitSize,
+                                          (uint8_t*)input.cudaData + start * inner * unitSize, inputStride * unitSize,
+                                          (end - start) * inner * unitSize, outer);
     }
 }

@@ -4,7 +4,7 @@
 namespace xllm {
 
     LlamaModel::LlamaModel(const std::string &weightPath, const std::string &tokenPath): 
-        weight(weightPath), tokenizer(tokenPath), profiler(0.f) {      
+        weight(weightPath), tokenizer(tokenPath) {      
         
         sin.resize(params.max_positions);
         cos.resize(params.max_positions);
@@ -31,7 +31,9 @@ namespace xllm {
         cosData.CopyFrom(Data(DataType::FLOAT32, {(int)cos.size(), (int)cos[0].size()}, fcos));
         
         deviceMap = GetDeviceMap();
+        auto st = std::chrono::system_clock::now();
         WarmUp();
+        printf("Warm up spend %f s.\n", xllm::GetSpan(st, std::chrono::system_clock::now()));
     }
 
     std::vector<float> LlamaModel::MakeInput(std::vector<float> &history, int round, const std::string &input) {
@@ -192,6 +194,7 @@ namespace xllm {
             // auto st = std::chrono::system_clock::now();
             std::vector <int> ret = ForwardBatch(batch, inputIds, attentionMask, positionIds, pastKeyValues,
                                                  generationConfig, tokensManager);
+            // printf("ForwardBatch spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
 
             std::vector <float> fret;
             std::vector <float> results;
@@ -253,6 +256,7 @@ namespace xllm {
                     vmasks[i * maxLen + j] = 1.0f;
                 }
             }
+
             attentionMask.ToDevice(DataDevice::CPU);
             positionIds.ToDevice(DataDevice::CPU);
             attentionMask.CopyFrom(Data(DataType::FLOAT32, {batch, 1, maxLen}, vmasks));
@@ -263,7 +267,6 @@ namespace xllm {
                 break;
             }
 
-            //printf("spend %f s.\n", GetSpan(st, std::chrono::system_clock::now()));
         }
         if (retCb)
             retCb(-1, outputs);
@@ -574,30 +577,36 @@ namespace xllm {
             // hiddenStates.ToDevice(DataDevice::CPU);
         }
 
-        RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
-        Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
-        Linear(hiddenStates, weight["lm_head.weight"], logits);
-        logits.ToDevice(DataDevice::CPU);
+        Data tempHiddenStates(DataType::FLOAT32, {bsz, 1, params.embed_dim});
+        Data *lastHiddenStates;
+        if (seqlen > 1) {
+            Split(hiddenStates, 1, seqlen - 1, seqlen, tempHiddenStates);
+            lastHiddenStates = &tempHiddenStates;
+        } else {
+            lastHiddenStates = &hiddenStates;
+        }
 
         std::vector <int> lastRet;
-        auto st = std::chrono::system_clock::now();
-        if (generationConfig.IsSimpleGreedy()) {
-            for (int b = 0; b < batch; b++) {
-                int base = b * logits.dims[1] + logits.dims[1] - 1;
-                std::pair <float, int> ret = std::make_pair(-1e9, -1);
-                for (int i = 0; i < logits.dims.back(); i++) {
-                    ret = max(ret, std::make_pair(((float *) logits.cpuData)[base * logits.dims.back() + i], i));
+        {
+            auto &hiddenStates = *lastHiddenStates;
+            RMSNorm(hiddenStates, weight["model.norm.weight"], hiddenStates, 1e-6);
+            Data logits(DataType::FLOAT32, {bsz, hiddenStates.dims[1], params.vocab_size});
+            Linear(hiddenStates, weight["lm_head.weight"], logits);
+            Data topk(DataType::FLOAT32, {bsz, 1, 2});
+            if (generationConfig.IsSimpleGreedy()) {
+                TopK(logits, topk, 1);
+                topk.ToDevice(DataDevice::CPU);
+                for (int b = 0; b < batch; b++) {
+                    int base = b;
+                    lastRet.push_back((int) (((float *) topk.cpuData)[base * 2] + 1e-3));
                 }
-                lastRet.push_back(ret.second);
-            }
-        } else {
-            for (int b = 0; b < batch; b++) {
-                int base = b * logits.dims[1] + logits.dims[1] - 1;
-                lastRet.push_back(TOPKSampling(logits, base, generationConfig, lastTokens.units[b]));
+            } else {
+                // for (int b = 0; b < batch; b++) {
+                //     int base = b * logits.dims[1] + logits.dims[1] - 1;
+                //     lastRet.push_back(LLMSampling(logits, base, generationConfig, lastTokens.units[b]));
+                // }
             }
         }
-        float spend = GetSpan(st, std::chrono::system_clock::now());
-        profiler += spend;
 
         return lastRet;
     }

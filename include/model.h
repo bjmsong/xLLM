@@ -119,10 +119,12 @@ namespace xllm {
         int sample_top_p(uint8_t* probs, const GenerationConfig& generationConfig);
 
         void printProfiler() {
-            printf("Sampling spend %f \n", profiler);
+            for (auto &it : profiler) {
+                printf("%s spend %f\n", it.first.c_str(), it.second);
+            }
         };
 
     private:
-        float profiler;
+        std::map <std::string, float> profiler;
     };
 }

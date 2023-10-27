@@ -43,3 +43,4 @@ bool xllmCudaAddTo(xllm::Data &input0, const xllm::Data &input1, float alpha);
 
 bool xllmCudaSilu(const xllm::Data &input, xllm::Data &output);
 bool xllmCudaMulTo(xllm::Data &input0, const xllm::Data &input1, float alpha);
+bool xllmCudaTopK(const xllm::Data &input, xllm::Data &output, int topk);

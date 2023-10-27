@@ -59,10 +59,13 @@ void ParseArgs(int argc, char **argv, BenchmarkConfig &config) {
 }
 
 int main(int argc, char **argv) {
+    auto start = std::chrono::system_clock::now();
     BenchmarkConfig config;
     ParseArgs(argc, argv, config);
     xllm::SetThreads(config.threads);
+    auto st = std::chrono::system_clock::now();
     std::unique_ptr<xllm::LlamaModel> model = std::make_unique<xllm::LlamaModel>(config.weightPath, config.tokenPath);
+    printf("Initialize Model spend %f s.\n", xllm::GetSpan(st, std::chrono::system_clock::now()));
 
     xllm::GenerationConfig generationConfig;
     generationConfig.output_token_limit = config.limit;
@@ -106,7 +109,7 @@ int main(int argc, char **argv) {
 
     std::vector <std::string> outputs;
     static int tokens = 0;
-    auto st = std::chrono::system_clock::now();
+    st = std::chrono::system_clock::now();
     static auto promptTime = st;
     model->ResponseBatch(input_tokens, outputs, [](int index, std::vector<std::string> &contents) {
         if (index != -1) {
@@ -135,10 +138,10 @@ int main(int argc, char **argv) {
 
     printf("batch: %d\n", (int)inputs.size());
     printf("prompt token number = %d\n", promptTokenNum);
-    printf("prompt use %f s\n", promptSpend);
-    printf("prompt speed = %f tokens / s\n", (float)promptTokenNum / promptSpend);
+    printf("Prefill takes %f s\n", promptSpend);
     printf("output %d tokens\nuse %f s\nspeed = %f tokens / s\n", tokens, spend, tokens / spend);
     // xllm::PrintProfiler();
     // model->printProfiler();
+    printf("Total spend %f s.\n", xllm::GetSpan(start, std::chrono::system_clock::now()));
     return 0;
 }

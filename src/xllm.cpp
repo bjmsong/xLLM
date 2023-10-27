@@ -159,4 +159,16 @@ namespace xllm {
             }
         }
     }
+
+    void TopK(const Data &input, Data &output, int topk) {
+        curExecutor->Run("TopK", {
+                {"input", (Data*)&input}, {"output", &output}
+        }, {}, {{"topk", topk}});
+    };
+
+    void Split(const Data &input, int axis, int start, int end, Data &output) {
+        curExecutor->Run("Split", {
+                {"input", (Data*)&input}, {"output", &output}
+        }, {}, {{"axis", axis}, {"start", start}, {"end", end}});
+    }
 }

@@ -54,5 +54,6 @@ namespace xllm {
     void AddTo(Data &input0, const Data &input1, float alpha = 1.0); // input0 += input1 * alpha
     void Silu(const Data &input, Data &output);
     void MulTo(Data &input0, const Data &input1); // input0 *= input1
-
+    void TopK(const Data &input, Data &output, int topk);
+    void Split(const Data &input, int axis, int start, int end, Data &output);
 }

@@ -468,6 +468,57 @@ bool xllmCudaLlamaRotatePosition2D(xllm::Data &data, const xllm::Data &positionI
 }
 
 template <int THREAD_PER_BLOCK>
+__global__ void xllmLayerNormKernelTop1(float *input, float *output, int channels) {
+    __shared__ float idData[THREAD_PER_BLOCK];
+    __shared__ float maxData[THREAD_PER_BLOCK];
+    float *inputData = input + blockIdx.x * channels;
+    float *outputData = output + blockIdx.x * 2;
+    int tid = threadIdx.x;
+    maxData[tid] = -1e100;
+    for (int j = tid; j < channels; j += THREAD_PER_BLOCK) {
+        if (inputData[j] > maxData[tid]) {
+            maxData[tid] = inputData[j];
+            idData[tid] = j;
+        }
+    }
+    __syncthreads();
+
+    for (unsigned int s = THREAD_PER_BLOCK / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            if (maxData[tid] < maxData[tid + s]) {
+                maxData[tid] = maxData[tid + s];
+                idData[tid] = idData[tid + s];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        outputData[0] = idData[0];
+        outputData[1] = maxData[0];
+    }
+}
+
+bool xllmCudaTopK(const xllm::Data &input, xllm::Data &output, int topk) {
+    if (topk != 1) {
+        printf("topk: unsupport topk > 1.");
+        exit(0);
+    }
+
+    float *cudaInput = (float *) xllmCudaPrepareInput(input);
+    float *cudaOutput = (float *) xllmCudaPrepareInput(output);
+
+    int dimsLen = input.dims.size();
+    int outer = input.Count(0) / input.Count(dimsLen - 1);
+    int channels = input.dims[dimsLen - 1];
+
+    xllmLayerNormKernelTop1 <256> <<< outer, 256 >>> (cudaInput, cudaOutput, channels);
+    xllmCudaFinishInput(input, cudaInput);
+    xllmCudaFinishOutput(output, cudaOutput);
+    return true;
+}
+
+template <int THREAD_PER_BLOCK>
 __global__ void xllmTransposeByRowKernel(uint8_t *dst, uint8_t *ori, int n, int m, int k) {
     int row = blockIdx.x / m, col = blockIdx.x % m;
     uint8_t *curInput = ori + (row * m + col) * k;
