@@ -307,6 +307,7 @@ __global__ void xllmRMSNormKernelInner1(float *input, float *weight, float *outp
 }
 
 bool xllmCudaRMSNorm(const xllm::Data &input, xllm::Data &weight, xllm::Data &output, float eps) {
+    nvtxRangePush("xllmCudaRMSNorm");
     float *cudaInput = (float *) xllmCudaPrepareInput(input);
     float *cudaOutput = (float *) xllmCudaPrepareInput(output);
 
@@ -325,6 +326,7 @@ bool xllmCudaRMSNorm(const xllm::Data &input, xllm::Data &weight, xllm::Data &ou
 
     xllmCudaFinishInput(input, cudaInput);
     xllmCudaFinishOutput(output, cudaOutput);
+    nvtxRangePop();
     return true;
 }
 
@@ -365,6 +367,7 @@ __global__ void FastllmGemvFp32Fp16Kernel2(float *A, half *B, float *C, float *b
 }
 
 bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xllm::Data &bias, xllm::Data &output, int n, int m, int k) {
+    nvtxRangePush("xllmCudaMatMulFloat16");
     if (weight.cudaData == nullptr || weight.extraCudaData.size() == 0) {
         float *cudaBiasData;
         cudaMalloc(&cudaBiasData, k * sizeof(float));
@@ -424,6 +427,7 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
     xllmCudaFinishInput(input, cudaInput);
     xllmCudaFinishOutput(output, cudaOutput);
     // cudaDeviceSynchronize();
+    nvtxRangePop();
     return true;
 }
 

@@ -460,9 +460,12 @@ namespace xllm {
         Data w3(DataType::FLOAT32, {bsz, seqlen, params.intermediate_size});
         Data w2(DataType::FLOAT32, {bsz, seqlen, params.hidden_size});
 
+        // inputIds: (bsz, seqlen)
+        // hiddenStates: (bsz, seqlen, embed_dim)
         Embedding(inputIds, this->weight["model.embed_tokens.weight"], hiddenStates);
         for (int i = 0; i < params.block_cnt; i++) {
             ApplyDeviceMap(this->deviceMap, i + 1, params.block_cnt);
+            // attenInput: (bsz, seqlen, embed_dim)
             RMSNorm(hiddenStates, this->weight["model.layers." + std::to_string(i) + ".input_layernorm.weight"],
                     attenInput, 1e-6);
             std::string qWeightName = "model.layers." + std::to_string(i) + ".self_attn.q_proj.weight";
@@ -474,6 +477,7 @@ namespace xllm {
             q.Reshape(hiddenStates.dims);
             k.Reshape(hiddenStates.dims);
             v.Reshape(hiddenStates.dims);
+            // q/k/v: (bsz, seqlen, embed_dim)
             Linear(attenInput, weight[qWeightName], q);
             Linear(attenInput, weight[kWeightName], k);
             Linear(attenInput, weight[vWeightName], v);
@@ -483,13 +487,16 @@ namespace xllm {
             k.Reshape(qkvSize);
             v.Reshape(qkvSize);
 
-            xllm::LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
-            xllm::LlamaRotatePosition2D(k, positionIds, sinData, cosData, params.rotary_dim);
+            // q/k: (bsz, seqlen, params.num_attention_heads, embed_dim/params.num_attention_heads)
+            LlamaRotatePosition2D(q, positionIds, sinData, cosData, params.rotary_dim);
+            LlamaRotatePosition2D(k, positionIds, sinData, cosData, params.rotary_dim);
 
+            // q/k/v -> (bsz, params.num_attention_heads, seqlen, embed_dim/params.num_attention_heads)
             PermuteSelf(q, {0, 2, 1, 3});
             PermuteSelf(k, {0, 2, 1, 3});
             PermuteSelf(v, {0, 2, 1, 3});
 
+            // q/k/v: (bsz*params.num_attention_heads, seqlen, embed_dim/params.num_attention_heads)
             qkvSize = {bsz * params.num_attention_heads, seqlen, -1};
             q.Reshape(qkvSize);
             k.Reshape(qkvSize);
@@ -536,6 +543,7 @@ namespace xllm {
             // k.ToDevice(DataDevice::CPU);
             // pastKey.ToDevice(DataDevice::CPU);
             // uint16_t *pastKeyData = (uint16_t *) pastKey.cpuData;
+            // pastKey: (bsz * params.num_attention_heads, historyLen, embed_dim/params.num_attention_heads)
             CatDirectFP16(pastKey, k, 1);
             // pastKey.ToDevice(DataDevice::CPU);
             // pastKeyData = (uint16_t *) pastKey.cpuData;
@@ -543,8 +551,8 @@ namespace xllm {
             CatDirect(pastValue, v, 1);
 
             // 1.2 Attention
-            // 1.2.0 q * k^T
-            // q.ToDevice(DataDevice::CPU);
+            // 1.2.0 Attention score: q * k^T
+            // attenWeights: (bsz * params.num_attention_heads, seqlen, historyLen)
             Data attenWeights(DataType::FLOAT32, {q.dims[0], q.dims[1], pastKey.dims[1]});
             MatMulTransBFP16(q, pastKey, attenWeights, 1.0 / sqrt(params.head_dim));
             // attenWeights.ToDevice(DataDevice::CPU);
@@ -556,14 +564,16 @@ namespace xllm {
                 AttentionMask(attenWeights, attentionMask, -10000);
             }
             SoftMax(attenWeights, attenWeights, -1);
-            // attenWeights.ToDevice(DataDevice::CPU);
             attenOutput.Reshape({bsz*params.num_attention_heads, seqlen, -1});
+            // attenOutput: (bsz*params.num_attention_heads, seqlen, embed_dim/params.num_attention_heads)
             MatMul(attenWeights, pastValue, attenOutput);
 
             PermuteSelf(attenOutput, {1, 0, 2});
             attenOutput.Reshape({seqlen, bsz, -1});
+            // attenOutput: (bsz, seqlen, embed_dim)
             PermuteSelf(attenOutput, {1, 0, 2});
 
+            // attenLastOutput: (bsz, seqlen, embed_dim)
             Linear(attenOutput, weight[oWeightName], attenLastOutput);
             AddTo(hiddenStates, attenLastOutput);
             // 2. mlp
@@ -574,7 +584,6 @@ namespace xllm {
             MulTo(w1, w3);
             Linear(w1, weight["model.layers." + std::to_string(i) + ".mlp.down_proj.weight"], w2);
             AddTo(hiddenStates, w2);
-            // hiddenStates.ToDevice(DataDevice::CPU);
         }
 
         Data tempHiddenStates(DataType::FLOAT32, {bsz, 1, params.embed_dim});
