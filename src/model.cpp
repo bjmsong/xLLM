@@ -183,7 +183,7 @@ namespace xllm {
         std::vector <std::pair <Data, Data> > pastKeyValues;
         for (int i = 0; i < params.block_cnt; i++) {
             pastKeyValues.push_back(std::make_pair(Data(DataType::FLOAT16),
-                                                   Data(DataType::FLOAT32)));
+                                                   Data(DataType::FLOAT16)));
         }
 
         std::string retString = "";
@@ -548,7 +548,7 @@ namespace xllm {
             // pastKey.ToDevice(DataDevice::CPU);
             // pastKeyData = (uint16_t *) pastKey.cpuData;
 
-            CatDirect(pastValue, v, 1);
+            CatDirectFP16(pastValue, v, 1);
 
             // 1.2 Attention
             // 1.2.0 Attention score: q * k^T
@@ -566,7 +566,7 @@ namespace xllm {
             SoftMax(attenWeights, attenWeights, -1);
             attenOutput.Reshape({bsz*params.num_attention_heads, seqlen, -1});
             // attenOutput: (bsz*params.num_attention_heads, seqlen, embed_dim/params.num_attention_heads)
-            MatMul(attenWeights, pastValue, attenOutput);
+            MatMulFP16(attenWeights, pastValue, attenOutput);
 
             PermuteSelf(attenOutput, {1, 0, 2});
             attenOutput.Reshape({seqlen, bsz, -1});

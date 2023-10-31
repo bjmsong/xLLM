@@ -51,6 +51,7 @@ namespace xllm {
     void AttentionMask(Data &input, const Data &mask, float maskValue); // 把input里对应位置mask中为1的部分变成maskValue
     void SoftMax(const Data &input, Data &output, int axis);
     void MatMul(const Data &input0, const Data &input1, Data &output, float alpha = 1.0);
+    void MatMulFP16(const Data &input0, const Data &input1, Data &output, float alpha = 1.0);
     void AddTo(Data &input0, const Data &input1, float alpha = 1.0); // input0 += input1 * alpha
     void Silu(const Data &input, Data &output);
     void MulTo(Data &input0, const Data &input1); // input0 *= input1

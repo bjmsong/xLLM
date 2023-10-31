@@ -39,6 +39,10 @@ bool xllmCudaBatchMatMul(const xllm::Data &input0, const xllm::Data &input1, xll
                                   int input0Spatial, int input1Spatial, int outputSpatial,
                                   int input0Stride, int input1Stride,
                                   int batch, int n, int m, int k, float alpha);
+bool xllmCudaBatchMatMulFP16(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
+                                  int input0Spatial, int input1Spatial, int outputSpatial,
+                                  int input0Stride, int input1Stride,
+                                  int batch, int n, int m, int k, float alpha);
 bool xllmCudaAddTo(xllm::Data &input0, const xllm::Data &input1, float alpha);
 
 bool xllmCudaSilu(const xllm::Data &input, xllm::Data &output);

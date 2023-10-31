@@ -111,6 +111,12 @@ namespace xllm {
         }, {{"alpha", alpha}}, {});
     }
 
+    void MatMulFP16(const Data &input0, const Data &input1, Data &output, float alpha) {
+        curExecutor->Run("MatMulFP16", {
+                {"input0", (Data*)&input0}, {"input1", (Data*)&input1}, {"output", &output}
+        }, {{"alpha", alpha}}, {});
+    }
+
     void AddTo(Data &input0, const Data &input1, float alpha) {
         curExecutor->Run("AddTo", {
                 {"input0", &input0}, {"input1", (Data*)&input1}

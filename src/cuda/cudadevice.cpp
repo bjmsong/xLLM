@@ -15,6 +15,7 @@ namespace xllm {
         this->ops["AttentionMask"] = (BaseOperator*)(new CudaAttentionMaskOp());
         this->ops["SoftMax"] = (BaseOperator*)(new CudaSoftMaxOp());
         this->ops["MatMul"] = (BaseOperator*)(new CudaMatMulOp());
+        this->ops["MatMulFP16"] = (BaseOperator*)(new CudaMatMulFP16Op());
         this->ops["AddTo"] = (BaseOperator*)(new CudaAddToOp());
         this->ops["Silu"] = (BaseOperator*)(new CudaSiluOp());
         this->ops["MulTo"] = (BaseOperator*)(new CudaMulToOp());
@@ -204,15 +205,38 @@ namespace xllm {
         int n = input0.dims[input0.dims.size() - 2];
         int m = input0.dims.back();
         int k = input1.dims[input1.dims.size() - 1];
-        int batch0 = input0.Count(0) / input0Spatial;
-        int batch1 = input1.Count(0) / input1Spatial;
+        int batch = input0.Count(0) / input0Spatial;
 
         int outputSpatial = output.Count(output.dims.size() - 2);
         xllmCudaBatchMatMul(input0, input1, output,
                      input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
-                     batch0, n, m, k, alpha);
+                     batch, n, m, k, alpha);
     }
 
+    void CudaMatMulFP16Op::Run(const std::string &opType, const DataDict &datas,
+                          const FloatDict &floatParams, const IntDict &intParams) {
+        Data &input0 = *(datas.find("input0")->second);
+        Data &input1 = *(datas.find("input1")->second);
+        Data &output = *(datas.find("output")->second);
+
+        output.Allocate();
+
+        float alpha = floatParams.find("alpha") != floatParams.end() ? floatParams.find("alpha")->second : -1;
+        int input0Spatial = input0.Count(input0.dims.size() - 2);
+        int input1Spatial = input1.dims.back()*input1.expandDims[input1.dims.size() - 2];
+        int input0Stride = input0.strides[input0.dims.size() - 2];
+        int input1Stride = input1.strides[input1.dims.size() - 2];
+        int n = input0.dims[input0.dims.size() - 2];
+        int m = input0.dims.back();
+        int k = input1.dims[input1.dims.size() - 1];
+        int batch = input0.Count(0) / input0Spatial;
+
+        int outputSpatial = output.Count(output.dims.size() - 2);
+        xllmCudaBatchMatMulFP16(input0, input1, output,
+                     input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
+                     batch, n, m, k, alpha);
+    }
+    
     void CudaMatMulTransBOp::Run(const std::string &opType, const DataDict &datas,
                                 const FloatDict &floatParams, const IntDict &intParams) {
         Data &input0 = *(datas.find("input0")->second);

@@ -857,6 +857,50 @@ bool xllmCudaBatchMatMul(const xllm::Data &input0, const xllm::Data &input1, xll
     return true;
 }
 
+bool xllmCudaBatchMatMulFP16(const xllm::Data &input0, const xllm::Data &input1, xllm::Data &output,
+                            int input0Spatial, int input1Spatial, int outputSpatial,
+                            int input0Stride, int input1Stride,
+                            int batch, int n, int m, int k, float alpha) {
+    float *cudaInput0 = (float *) xllmCudaPrepareInput(input0);
+    half *cudaInput1 = (half *) xllmCudaPrepareInput(input1);
+    float *cudaOutput = (float *) xllmCudaPrepareOutput(output);
+    float beta = 0;
+    auto xllmCublasHandle = getxllmCublasHandle();
+    cublasStatus_t status;
+
+    half* cudaInput0FP16 = (half*) xllmCudaMalloc(input0.counts * sizeof(half));
+    half* cudaOutputFP16 = (half*) xllmCudaMalloc(output.counts * sizeof(half));
+    int threadPerBlock = std::min(256, input0.counts);
+    xllmCudaFloat2HalfKernel <<< (input0.counts - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaInput0, cudaInput0FP16, input0.counts);
+
+    __half h_alpha = __float2half_rn(alpha), h_beta = __float2half_rn(beta);
+    status = cublasHgemmStridedBatched(xllmCublasHandle,
+                                       CUBLAS_OP_N, CUBLAS_OP_N,
+                                       k, n, m, &h_alpha,
+                                       cudaInput1, input1Stride, input1Spatial,
+                                       cudaInput0FP16, input0Stride, input0Spatial,
+                                       &h_beta,
+                                       cudaOutputFP16, k, k * n, batch);
+    if (status != CUBLAS_STATUS_SUCCESS) {
+        printf("status = %d\n", (int)status);
+        printf("%d %d %d\n", k, n, m);
+        printf("Error: cublas error.\n");
+        throw("cublas error");
+        exit(0);
+    }
+
+    threadPerBlock = std::min(256, output.counts);
+    xllmCudaHalf2FloatKernel <<< (output.counts - 1) / threadPerBlock + 1, threadPerBlock >>>(cudaOutputFP16, cudaOutput, output.counts);
+
+    xllmCudaFree(cudaInput0FP16);
+    xllmCudaFree(cudaOutputFP16);
+    xllmCudaFinishInput(input0, cudaInput0);
+    xllmCudaFinishInput(input1, cudaInput1);
+    xllmCudaFinishOutput(output, cudaOutput);
+
+    return true;
+}
+
 __global__ void xllmAddToKernel(float* a, float *b, float alpha, int len) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx < len) {
