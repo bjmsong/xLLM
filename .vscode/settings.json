@@ -1,4 +1,5 @@
 {
+    "files.associations":{"*.cu":"cpp"},
     "clangd.fallbackFlags": [
         // 设置clangd代码检查的c++版本，目前默认是c++14
         "-std=c++2a",

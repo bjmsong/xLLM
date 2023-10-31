@@ -56,4 +56,6 @@ namespace xllm {
     void MulTo(Data &input0, const Data &input1); // input0 *= input1
     void TopK(const Data &input, Data &output, int topk);
     void Split(const Data &input, int axis, int start, int end, Data &output);
+    void Attention(const Data &q, const Data &k, const Data &v, const Data &mask, Data &output,
+                   int group, float scale, int attentionType);
 }

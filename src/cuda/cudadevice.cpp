@@ -20,6 +20,7 @@ namespace xllm {
         this->ops["MulTo"] = (BaseOperator*)(new CudaMulToOp());
         this->ops["TopK"] = (BaseOperator*)(new CudaTopKOp());
         this->ops["Split"] = (BaseOperator*)(new CudaSplitOp());
+        this->ops["Attention"] = (BaseOperator*)(new CudaAttentionOp());
     }
 
     bool CudaDevice::Malloc(void **ret, size_t size) {
@@ -229,13 +230,12 @@ namespace xllm {
         int n = input0.dims[input0.dims.size() - 2];
         int m = input0.dims.back();
         int k = input1.dims[input1.dims.size() - 2];
-        int batch0 = input0.Count(0) / input0Spatial;
-        int batch1 = input1.Count(0) / input1Spatial;
+        int batch = input0.Count(0) / input0Spatial;
 
         int outputSpatial = output.Count(output.dims.size() - 2);
         xllmCudaBatchMatMulTransB(input0, input1, output,
                      input0Spatial, input1Spatial, outputSpatial, input0Stride, input1Stride,
-                     batch0, n, m, k, alpha);
+                     batch, n, m, k, alpha);
     }
 
     void CudaMatMulTransBFP16Op::Run(const std::string &opType, const DataDict &datas,
@@ -414,5 +414,19 @@ namespace xllm {
         xllmCudaMemcpy2DDeviceToDevice((uint8_t*)output.cudaData, outputStride * unitSize,
                                           (uint8_t*)input.cudaData + start * inner * unitSize, inputStride * unitSize,
                                           (end - start) * inner * unitSize, outer);
+    }
+
+    void CudaAttentionOp::Run(const std::string &opType, const xllm::DataDict &datas,
+                           const xllm::FloatDict &floatParams, const xllm::IntDict &intParams) {
+        Data emptyData;
+        Data &q = *(datas.find("q")->second);
+        Data &k = *(datas.find("k")->second);
+        Data &v = *(datas.find("v")->second);
+        Data &mask = datas.find("mask")->second ? *(datas.find("mask")->second) : emptyData;
+        Data &output = *(datas.find("output")->second);
+        int group = intParams.find("group") != intParams.end() ? intParams.find("group")->second : 1;
+        float scale = floatParams.find("scale") != floatParams.end() ? floatParams.find("scale")->second : 1.0;
+        output.Allocate();
+        xllmCudaAttention(q, k, v, mask, output, group, scale);
     }
 }

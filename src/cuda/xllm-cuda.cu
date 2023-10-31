@@ -5,7 +5,7 @@
 #include <cublas_v2.h>
 #include "nvtx3/nvToolsExt.h" 
 
-#include "cuda/xllm-cuda.cuh"
+#include "../../include/cuda/xllm-cuda.cuh"
 
 // #define CHECK(call)
 // {
@@ -264,6 +264,7 @@ void xllmCudaMemcpy2DDeviceToDeviceFP16(void * 	dst, size_t 	dpitch, const void 
 
 void xllmCudaMemcpy2DDeviceToDevice(void * 	dst, size_t 	dpitch, const void * 	src,
                                        size_t 	spitch, size_t 	width, size_t 	height) {
+    // Copy a matrix
     cudaMemcpy2D(dst, dpitch, src, spitch, width, height, cudaMemcpyDeviceToDevice);
     // cudaDeviceSynchronize();
 }
@@ -274,20 +275,19 @@ __global__ void xllmRMSNormKernelInner1(float *input, float *weight, float *outp
     input = input + o * channels;
     output = output + o * channels;
 
-    __shared__ float sdata2[THREAD_PER_BLOCK];
-    __shared__ float scale;
-
-    // 1. 每个线程计算一部分
+    // 1. 计算平方和：每个线程计算一部分
+    __shared__ float sdata2[THREAD_PER_BLOCK];  // share memory
     unsigned int tid = threadIdx.x;
     float sum2 = 0.0;
-    for (int i = tid; i < channels; i += THREAD_PER_BLOCK) {
+#pragma unroll
+    for (int i = tid; i < channels; i += blockDim.x) {
         float x = input[i];
         sum2 += x * x;
     }
     sdata2[tid] = sum2;
-    __syncthreads();
+    __syncthreads();  // sync within block
 
-    // 2. 求和
+    // 2. sdata2[0] = sum(sdata2)
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sdata2[tid] += sdata2[tid + s];
@@ -296,12 +296,14 @@ __global__ void xllmRMSNormKernelInner1(float *input, float *weight, float *outp
     }
 
     // 3. 计算参数
+    __shared__ float scale;
     if (tid == 0) {
         scale = 1.0 / sqrt(sdata2[0] / channels + eps);
     }
     __syncthreads();
 
-    for (int i = tid; i < channels; i += THREAD_PER_BLOCK) {
+#pragma unroll
+    for (int i = tid; i < channels; i += blockDim.x) {
         output[i] = (input[i] * scale * weight[i]);
     }
 }
@@ -339,7 +341,7 @@ __global__ void xllmCudaBiasKernel(float *a, float *bias, int k) {
 }
 
 template <int THREAD_PER_BLOCK, int PART>
-__global__ void FastllmGemvFp32Fp16Kernel2(float *A, half *B, float *C, float *bias, int m, int k) {
+__global__ void xllmGemvFp32Fp16Kernel2(float *A, half *B, float *C, float *bias, int m, int k) {
     __shared__ float sdata[THREAD_PER_BLOCK];
     unsigned int tid = threadIdx.x;
 
@@ -383,6 +385,7 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
     float *cudaOutput = (float*)xllmCudaPrepareOutput(output);
 
     if (n > 1) {
+        // 矩阵*矩阵
         half *cudaFp16Input, *cudaFp16Output;
         cudaFp16Input = (half *) xllmCudaMalloc(n * m * sizeof(half));
         cudaFp16Output = (half *) xllmCudaMalloc(n * k * sizeof(half));
@@ -397,7 +400,8 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
         int threadPerBlock = std::min(256, len);
         xllmCudaFloat2HalfKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock>>>(cudaInput, cudaFp16Input,
                                                                                           len);
-
+        // cublasGemmEx is an extension of cublas<t>gemm that allows the user to individually specify the data types 
+        // for each of the A, B and C matrices
         status = cublasGemmEx(fastllmCublasHandle,
                               CUBLAS_OP_T, CUBLAS_OP_N,
                               k, n, m,
@@ -421,7 +425,8 @@ bool xllmCudaMatMulFloat16(const xllm::Data &input, xllm::Data &weight, const xl
         xllmCudaFree(cudaFp16Input);
         xllmCudaFree(cudaFp16Output);
     } else {
-        FastllmGemvFp32Fp16Kernel2<256, 1> <<< k, 256 >>>(cudaInput, (half *) weight.cudaData, cudaOutput, cudaBiasData, m, k);
+        // 向量*矩阵
+        xllmGemvFp32Fp16Kernel2<256, 1> <<< k, 256 >>>(cudaInput, (half *) weight.cudaData, cudaOutput, cudaBiasData, m, k);
     }
 
     xllmCudaFinishInput(input, cudaInput);
@@ -611,6 +616,7 @@ bool xllmCudaBatchMatMulTransB(const xllm::Data &input0, const xllm::Data &input
     auto xllmCublasHandle = getxllmCublasHandle();
     cublasStatus_t status;
 
+    // for float
     status = cublasSgemmStridedBatched(xllmCublasHandle,
                                        CUBLAS_OP_T, CUBLAS_OP_N,
                                        k, n, m, &alpha,
@@ -663,6 +669,7 @@ bool xllmCudaBatchMatMulTransBFP16(const xllm::Data &input0, const xllm::Data &i
     //                                    &beta,
     //                                    cudaOutput, k, k * n, batch);
     __half h_alpha = __float2half_rn(alpha), h_beta = __float2half_rn(beta);
+    // for half
     status = cublasHgemmStridedBatched(xllmCublasHandle,
                                     CUBLAS_OP_T, CUBLAS_OP_N,
                                     k, n, m, &h_alpha,
@@ -716,19 +723,17 @@ bool xllmCudaAttentionMask(xllm::Data &input, const xllm::Data &mask, float mask
     return true;
 }
 
-// callable from the device
 template <int THREAD_PER_BLOCK>
 __device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int channels) {
-    // 共享内存类型(__shared__), 同一个block中的线程之间可以共享
     __shared__ float sdata[THREAD_PER_BLOCK];
     __shared__ float maxV;
 
-    // 1. 每个线程计算一部分
+    // 1. 求max
     unsigned int tid = threadIdx.x;
-    unsigned int per = (channels / THREAD_PER_BLOCK);  // 每个线程计算几个数据
-    unsigned int id = threadIdx.x * per;
-    unsigned int len = per;
-    // 最后一个线程把未能整除的数据一起计算
+    unsigned int per = (channels / THREAD_PER_BLOCK);
+    unsigned int id = threadIdx.x * per;  // 起始id
+    unsigned int len = per;   // 每个线程计算的数据数量
+    // 最后一个线程把剩下的数据一起打包
     if (tid == blockDim.x - 1) {
         len += (channels - per * THREAD_PER_BLOCK);
     }
@@ -739,7 +744,6 @@ __device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int cha
     sdata[tid] = maxValue;
     __syncthreads();
 
-    // 2. 求max
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sdata[tid] = max(sdata[tid], sdata[tid + s]);
@@ -747,13 +751,12 @@ __device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int cha
         __syncthreads();
     }
 
-    // 3. 记录max
     if (tid == 0) {
         maxV = sdata[0];
     }
     __syncthreads();
 
-    // 4. 求和
+    // 2. 求和
     float sum = 0;
     for (int i = 0; i < len; i++) {
         output[id + i] = exp(input[id + i] - maxV);
@@ -775,6 +778,7 @@ __device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int cha
     }
     __syncthreads();
 
+    // 3. 计算最终结果
     for (int i = 0; i < len; i++) {
         output[id + i] /= sdata[0];
     }
@@ -912,5 +916,192 @@ bool xllmCudaMulTo(xllm::Data &input0, const xllm::Data &input1, float alpha) {
     xllmMulToKernel <<< (len - 1) / threadPerBlock + 1, threadPerBlock>>>(cudaData, input1Data, alpha, len);
     xllmCudaFinishInput(input1, input1Data);
     xllmCudaFinishOutput(input0, cudaData);
+    return true;
+}
+
+template <int THREAD_PER_BLOCK>
+__global__ void SimpleMask(float* a, float *b, float maskValue, int spatial) {
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    if (i < spatial) {
+        if (b[i] > 0.99) {
+            a[i] = maskValue;
+        }
+    }
+}
+
+template <int THREAD_PER_BLOCK>
+__global__ void xllmAttentionKernel(float *qd, float *kd, float *vd, float *maskd, float *od,
+                                       float scale, int q1, int q2, int k1, int v2,
+                                       int group, int qstride, int kstride, int vstride, int ostride,
+                                       float *qk, float *temp) {
+    int o = blockIdx.x;
+    qd += o * qstride;
+    kd += (o / group) * kstride;
+    vd += (o / group) * vstride;
+    od += o * ostride;
+    qk += o * k1;
+    temp += o * k1;
+    for (int i = 0; i < q1; i++) {
+        for (int j = threadIdx.x; j < k1; j += THREAD_PER_BLOCK) {
+            if (maskd && maskd[i * k1 + j] > 0.99) {
+                qk[j] = -10000;
+                continue;
+            }
+            float sum = 0.0f;
+            float *tempQd = qd + i * q2, *tempKd = kd + j * q2;
+            for (int l = 0; l < q2; l++) {
+                sum += tempQd[l] * tempKd[l];
+            }
+            qk[j] = sum * scale;
+        }
+        __syncthreads();
+        xllmSoftmaxKernelInner1Func <THREAD_PER_BLOCK> (qk, temp, k1);
+        __syncthreads();
+        for (int j = threadIdx.x; j < v2; j += THREAD_PER_BLOCK) {
+            float *curInput1 = vd + j;
+            float sum = 0.0;
+            for (int l = 0; l < k1; l++) {
+                sum += temp[l] * curInput1[l * v2];
+            }
+            od[i * v2 + j] = sum;
+        }
+        __syncthreads();
+    }
+}
+
+bool xllmCudaAttention(const xllm::Data &q, const xllm::Data &k, const xllm::Data &v,
+                          const xllm::Data &mask, const xllm::Data &output, int group, float scale) {
+    int q0 = q.dims[0], q1 = q.dims[1], q2 = q.dims[2], k0 = k.dims[0], k1 = k.dims[1], v2 = v.dims[2];
+    float *qd = (float*)q.cudaData;
+    float *kd = (float*)k.cudaData;
+    float *vd = (float*)v.cudaData;
+    float *maskd = mask.dims.size() > 0 ? (float*)mask.cudaData : nullptr;
+    float *od = (float*)output.cudaData;
+    int batch = (mask.dims.size() == 3) ? mask.dims[0] : 1;
+    int maskStride = (mask.dims.size() == 3 ? mask.strides[0] : mask.Count(0));
+    if (false) {
+        float *qk = (float *) xllmCudaMalloc(q0 * k1 * sizeof(float));
+        float *temp = (float *) xllmCudaMalloc(q0 * k1 * sizeof(float));
+        xllmAttentionKernel<256> <<<q0, 256>>>(qd, kd, vd, maskd, od,
+                                                  scale, q1, q2, k1, v2,
+                                                  group, q.strides[0], k.strides[0], v.strides[0], output.strides[0],
+                                                  qk, temp);
+        xllmCudaFree(qk);
+        xllmCudaFree(temp);
+        return true;
+    }
+
+    if (q1 > 1024) {
+        float *qk = (float *) xllmCudaMalloc(q1 * k1 * sizeof(float));
+        float beta = 0, one = 1;
+        auto fastllmCublasHandle = getxllmCublasHandle();
+        cublasStatus_t status;
+
+
+        for (int i = 0; i < q0; i++) {
+            status = cublasSgemmStridedBatched(fastllmCublasHandle,
+                                               CUBLAS_OP_T, CUBLAS_OP_N,
+                                               k1, q1, q2, &scale,
+                                               kd + (i / group) * k.Count(1), k.strides[1], k.Count(1),
+                                               qd + i * q.Count(1), q.strides[1], q.Count(1),
+                                               &beta,
+                                               qk, k1, k1 * q1, 1);
+            if (status != CUBLAS_STATUS_SUCCESS) {
+                printf("status = %d\n", (int) status);
+                printf("Error: cublas error.\n");
+                throw ("cublas error");
+                exit(0);
+            }
+
+            if (maskd) {
+                SimpleMask<256> <<< (q1 * k1 / 256) + 1, 256>>>(qk, maskd + (i / (q0 / batch)) * maskStride, -10000, q1 * k1);
+            }
+
+            int outer = q1;
+            if (k1 < 8) {
+                xllmSoftmaxKernelInner1<1> <<< outer, 1 >>>(qk, qk, outer, k1);
+            } else if (k1 < 64) {
+                xllmSoftmaxKernelInner1<8> <<< outer, 8 >>>(qk, qk, outer, k1);
+            } else if (k1 < 512) {
+                xllmSoftmaxKernelInner1<64> <<< outer, 64 >>>(qk, qk, outer, k1);
+            } else {
+                xllmSoftmaxKernelInner1<256> <<< outer, 256 >>>(qk, qk, outer, k1);
+            }
+
+            status = cublasSgemmStridedBatched(fastllmCublasHandle,
+                                               CUBLAS_OP_N, CUBLAS_OP_N,
+                                               v2, q1, k1, &one,
+                                               vd + (i / group) * v.Count(1), v.strides[1], v.Count(1),
+                                               qk, k1, k1 * q1,
+                                               &beta,
+                                               od + i * v2 * q1, v2, v2 * q1, 1);
+            if (status != CUBLAS_STATUS_SUCCESS) {
+                printf("status = %d\n", (int) status);
+                printf("Error: cublas error.\n");
+                throw ("cublas error");
+                exit(0);
+            }
+        }
+
+        xllmCudaFree(qk);
+        // cudaDeviceSynchronize();
+        return true;
+    }
+
+    if (true) {
+        float *qk = (float *) xllmCudaMalloc(q0 * q1 * k1 * sizeof(float));
+        float *temp = (float *) xllmCudaMalloc(q0 * q1 * k1 * sizeof(float));
+        float beta = 0, one = 1;
+        auto fastllmCublasHandle = getxllmCublasHandle();
+        cublasStatus_t status;
+
+        status = cublasSgemmStridedBatched(fastllmCublasHandle,
+                                           CUBLAS_OP_T, CUBLAS_OP_N,
+                                           k1, q1 * group, q2, &scale,
+                                           kd, k.strides[1], k.Count(1),
+                                           qd, q.strides[1], q.Count(1) * group,
+                                           &beta,
+                                           qk, k1, k1 * q1 * group, q0 / group);
+        if (status != CUBLAS_STATUS_SUCCESS) {
+            printf("status = %d\n", (int) status);
+            printf("Error: cublas error.\n");
+            throw ("cublas error");
+            exit(0);
+        }
+
+        if (maskd) {
+            int spatial = q1 * k1, n = batch, m = q0 / batch;
+            xllmAttentionMaskKernel <256> <<< n * m, 256>>>(qk, maskd, -10000, n, m, spatial);
+        }
+
+        int outer = q0 * q1;
+        if (k1 < 8) {
+            xllmSoftmaxKernelInner1<1> <<< outer, 1 >>>(qk, temp, outer, k1);
+        } else if (k1 < 64) {
+            xllmSoftmaxKernelInner1<8> <<< outer, 8 >>>(qk, temp, outer, k1);
+        } else if (k1 < 512) {
+            xllmSoftmaxKernelInner1<64> <<< outer, 64 >>>(qk, temp, outer, k1);
+        } else {
+            xllmSoftmaxKernelInner1<256> <<< outer, 256 >>>(qk, temp, outer, k1);
+        }
+
+        status = cublasSgemmStridedBatched(fastllmCublasHandle,
+                                           CUBLAS_OP_N, CUBLAS_OP_N,
+                                           v2, q1 * group, k1, &one,
+                                           vd, v.strides[1], v.Count(1),
+                                           temp, k1, k1 * q1 * group,
+                                           &beta,
+                                           od, v2, v2 * q1 * group, q0 / group);
+        if (status != CUBLAS_STATUS_SUCCESS) {
+            printf("status = %d\n", (int) status);
+            printf("Error: cublas error.\n");
+            throw ("cublas error");
+            exit(0);
+        }
+        xllmCudaFree(qk);
+        xllmCudaFree(temp);
+        // cudaDeviceSynchronize();
+        return true;
+    }
     return true;
 }

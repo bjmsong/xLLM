@@ -1,5 +1,5 @@
 #pragma once
-#include "data.h"
+#include "../../include/data.h"
 
 void *xllmCudaMalloc(size_t size);
 void xllmCudaFree(void *ret);
@@ -44,3 +44,5 @@ bool xllmCudaAddTo(xllm::Data &input0, const xllm::Data &input1, float alpha);
 bool xllmCudaSilu(const xllm::Data &input, xllm::Data &output);
 bool xllmCudaMulTo(xllm::Data &input0, const xllm::Data &input1, float alpha);
 bool xllmCudaTopK(const xllm::Data &input, xllm::Data &output, int topk);
+bool xllmCudaAttention(const xllm::Data &q, const xllm::Data &k, const xllm::Data &v,
+                          const xllm::Data &mask, const xllm::Data &output, int group, float scale);

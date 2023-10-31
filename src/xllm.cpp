@@ -171,4 +171,12 @@ namespace xllm {
                 {"input", (Data*)&input}, {"output", &output}
         }, {}, {{"axis", axis}, {"start", start}, {"end", end}});
     }
+
+    void Attention(const Data &q, const Data &k, const Data &v, const Data &mask, Data &output,
+                   int group, float scale, int attentionType) {
+        curExecutor->Run("Attention", {
+                {"q", (Data*)&q}, {"k", (Data*)&k}, {"v", (Data*)&v},
+                {"mask", (Data*)&mask}, {"output", (Data*)&output}
+        }, {{"scale", scale}}, {{"group", group}});
+    }
 }

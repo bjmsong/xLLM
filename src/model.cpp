@@ -567,6 +567,8 @@ namespace xllm {
             attenOutput.Reshape({bsz*params.num_attention_heads, seqlen, -1});
             // attenOutput: (bsz*params.num_attention_heads, seqlen, embed_dim/params.num_attention_heads)
             MatMul(attenWeights, pastValue, attenOutput);
+            // Attention(q, pastKey, pastValue, attentionMask, attenOutput, 
+            // q.dims[0] / pastKey.dims[0], 1.0 / sqrt(params.head_dim), 1);
 
             PermuteSelf(attenOutput, {1, 0, 2});
             attenOutput.Reshape({seqlen, bsz, -1});
