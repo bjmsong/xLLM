@@ -49,21 +49,38 @@
 //     ]
 // }
 
+// {
+//     // 使用 IntelliSense 了解相关属性。 
+//     // 悬停以查看现有属性的描述。
+//     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+//     "version": "0.2.0",
+//     "configurations": [
+//         {
+//             "type": "lldb",
+//             "request": "launch",
+//             "name": "Debug",
+//             "cwd": "${workspaceFolder}",
+//             "program": "${workspaceFolder}/build-cuda/benchmark_batch",
+//             "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat.bin",
+//             "--token", "/root/autodl-tmp/tokenizer.bin", "--file", "${workspaceFolder}/benchmark/prompts.txt", 
+//             "-t", "32", "-l", "512"]
+//         }
+//     ]
+// }
+
 {
-    // 使用 IntelliSense 了解相关属性。 
-    // 悬停以查看现有属性的描述。
-    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
+            "type": "cuda-gdb",
             "request": "launch",
-            "name": "Debug",
+            "name": "CUDA C++: Launch",
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/build-cuda/benchmark_batch",
-            "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat.bin",
-            "--token", "/root/autodl-tmp/tokenizer.bin", "--file", "${workspaceFolder}/benchmark/prompts.txt", 
-            "-t", "32", "-l", "512"]
+            // "args": ["--weight", "/root/autodl-tmp/llama2_7b_chat.bin",
+            // "--token", "/root/autodl-tmp/tokenizer.bin", "--file", "${workspaceFolder}/benchmark/prompts.txt",
+            // "-t", "32", "-l", "512"]
+            "args": "--weight /root/autodl-tmp/llama2_7b_chat.bin --token /root/autodl-tmp/tokenizer.bin --file benchmark/prompts.txt -t 32 -l 512"
         }
     ]
 }
