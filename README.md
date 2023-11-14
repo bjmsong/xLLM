@@ -2,7 +2,7 @@
 
 ![running](./data/XLLM.gif)
 
-llama2推理加速库，基于fastllm进行了二次开发。在4090单卡上llama2-7b（FP16）推理速度可达5000+ tokens/s。支持CPU、GPU推理。支持流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。在4090单卡上llama2-7b（FP16）推理速度可达5000+ tokens/s。支持CPU、GPU推理。支持流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
 
 为提升推理性能，支持以下优化手段：
 
@@ -16,18 +16,18 @@ llama2推理加速库，基于fastllm进行了二次开发。在4090单卡上lla
 
 - 动态Batch
 
-✅权重量化
+✅Per-row Weight-only 量化
 
 ✅CUDA
 
-✅SIMD
+✅算子优化
+- CPU：多线程，SIMD，GEMM优化（Cache Locality，Tile，Avoid False Sharing）
+- GPU：CUDA
 
 ✅显存管理
 
 - 显存池
 - 不同层激活值显存复用
-
-✅GEMM优化
 
 
 ## 性能测试
@@ -35,11 +35,28 @@ llama2推理加速库，基于fastllm进行了二次开发。在4090单卡上lla
 ```bash
 # 固定输入、固定输出最大长度
 ./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/hello.txt -t 32 -b 80 -l 18
+```
 
+| 吞吐（tokens/s） | **5330**  |
+| ---------------- | --------- |
+| 模型             | llama2-7B |
+| 数据类型         | FP16      |
+| GPU              | 4090      |
+| batch_size       | 200       |
+
+```bash
 # 交替输入、固定输出最大长度
 # MAX OUTPUT LEN = 512, INPUT LEN = Repeat([5, 13, 27, 51])
 ./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32 -l 512
 ```
+
+| 吞吐（tokens/s） | 962       | 2200      |
+| ---------------- | --------- | --------- |
+| 模型             | llama2-7B | llama2-7B |
+| 精度             | FP16      | FP16      |
+| GPU              | 4090      | A100      |
+| 显存（G）        | 24        | 40        |
+| batch_size       | 48        | 160       |
 
 ## 快速开始
 1. 导出模型
