@@ -18,8 +18,6 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 
 ✅Per-row Weight-only 量化
 
-✅CUDA
-
 ✅算子优化
 - CPU：多线程，SIMD，GEMM优化（Cache Locality，Tile，Avoid False Sharing）
 - GPU：CUDA
@@ -40,7 +38,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | 吞吐（tokens/s） | **5330**  |
 | ---------------- | --------- |
 | 模型             | llama2-7B |
-| 数据类型         | FP16      |
+| 精度         | FP16      |
 | GPU              | 4090      |
 | batch_size       | 200       |
 
