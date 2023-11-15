@@ -19,7 +19,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 ✅Per-row Weight-only 量化
 
 ✅算子优化
-- CPU：多线程，SIMD，GEMM优化（Cache Locality，Tile，Avoid False Sharing）
+- CPU：多线程，SIMD，Cache Locality，Tile，Avoid False Sharing
 - GPU：CUDA
 
 ✅显存管理
