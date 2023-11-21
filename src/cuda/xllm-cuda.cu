@@ -724,63 +724,47 @@ bool xllmCudaAttentionMask(xllm::Data &input, const xllm::Data &mask, float mask
 }
 
 template <int THREAD_PER_BLOCK>
-__device__ void xllmSoftmaxKernelInner1Func(float *input, float *output, int channels) {
+__device__ void xllmSoftmaxKernelInner1Func(const float * __restrict input, float * __restrict output, int channels) {
     __shared__ float sdata[THREAD_PER_BLOCK];
-    __shared__ float maxV;
+    __shared__ float sdata2[THREAD_PER_BLOCK];
 
     // 1. 求max
     unsigned int tid = threadIdx.x;
-    unsigned int per = (channels / THREAD_PER_BLOCK);
-    unsigned int id = threadIdx.x * per;  // 起始id
-    unsigned int len = per;   // 每个线程计算的数据数量
-    // 最后一个线程把剩下的数据一起打包
-    if (tid == blockDim.x - 1) {
-        len += (channels - per * THREAD_PER_BLOCK);
-    }
-    float maxValue = input[id];
-    for (int i = 0; i < len; i++) {
-        maxValue = max(maxValue, input[id + i]);
-    }
-    sdata[tid] = maxValue;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            sdata[tid] = max(sdata[tid], sdata[tid + s]);
-        }
-        __syncthreads();
-    }
-
-    if (tid == 0) {
-        maxV = sdata[0];
-    }
-    __syncthreads();
-
-    // 2. 求和
+    unsigned int len = (channels + THREAD_PER_BLOCK - 1) / THREAD_PER_BLOCK; // 每个线程计算的数据数量
+    float maxValue = input[tid];
+    float maxValue_before;
     float sum = 0;
     for (int i = 0; i < len; i++) {
-        output[id + i] = exp(input[id + i] - maxV);
-        sum += output[id + i];
+        if (tid + i * THREAD_PER_BLOCK < channels){
+            maxValue_before = maxValue;
+            maxValue = max(maxValue, input[tid + i * THREAD_PER_BLOCK]);
+            sum = sum * exp(maxValue_before-maxValue) + exp(input[tid + i * THREAD_PER_BLOCK] - maxValue);
+        }
     }
-    sdata[tid] = sum;
+    sdata[tid] = maxValue;
+    sdata2[tid] = sum;
     __syncthreads();
 
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+    for (unsigned int s = THREAD_PER_BLOCK / 2; s > 0; s >>= 1) {
         if (tid < s) {
-            sdata[tid] += sdata[tid + s];
+            maxValue_before = sdata[tid];
+            sdata[tid] = max(sdata[tid], sdata[tid + s]);
+            sdata2[tid] = sdata2[tid] * exp(maxValue_before-sdata[tid]) + sdata2[tid + s] * exp(sdata[tid + s] - sdata[tid]);
         }
         __syncthreads();
     }
+
     if (tid == 0) {
-        if (fabs(sdata[0]) < 1e-6) {
-            sdata[0] = 0.1;
+        if (fabs(sdata2[0]) < 1e-6) {
+            sdata2[0] = 0.1;
         }
     }
     __syncthreads();
 
-    // 3. 计算最终结果
+    // 2. 计算最终结果
     for (int i = 0; i < len; i++) {
-        output[id + i] /= sdata[0];
+        if (tid + i * THREAD_PER_BLOCK < channels)
+            output[tid + i * THREAD_PER_BLOCK] = __fdividef(__expf(input[tid + i * THREAD_PER_BLOCK] - sdata[0]), sdata2[0]);
     }
 }
 
@@ -809,7 +793,7 @@ bool xllmCudaSoftmax(const xllm::Data &input, xllm::Data &output, int axis) {
         if (channels < 8) {
             xllmSoftmaxKernelInner1 <1> <<< outer, 1 >>> (cudaInput, cudaOutput, outer, channels);
         } else if (channels < 64) {
-            xllmSoftmaxKernelInner1 <1> <<< outer, 1 >>> (cudaInput, cudaOutput, outer, channels);
+            xllmSoftmaxKernelInner1 <16> <<< outer, 16 >>> (cudaInput, cudaOutput, outer, channels);
         } else if (channels < 512) {
             xllmSoftmaxKernelInner1 <64> <<< outer, 64 >>> (cudaInput, cudaOutput, outer, channels);
         } else {
