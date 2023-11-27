@@ -12,9 +12,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 - 量化
 - GQA
 
-✅Batch推理
-
-- 动态Batch
+✅动态Batch
 
 ✅Weight-only 量化
 
@@ -24,7 +22,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 ✅GPU算子优化
 
 - SoftMax: Online Normalizer, reduce R/W, Memory Coalscing，Avoid Warp Divergence etc.
-- GEMM: Tile，Thread Coarsening，blockDim优化，Boundary check，Memory Coalscing
+- GEMM: cuBLAS
 
 ✅CPU算子优化
 
@@ -39,7 +37,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 ## 性能测试
 
 ```bash
-# 固定输入、固定输出最大长度
+# MAX OUTPUT LEN = 18, INPUT LEN fixed
 ./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/hello.txt -t 32 -b 80 -l 18
 ```
 
@@ -51,7 +49,6 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | batch_size       | 200       |
 
 ```bash
-# 交替输入、固定输出最大长度
 # MAX OUTPUT LEN = 512, INPUT LEN = Repeat([5, 13, 27, 51])
 ./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32 -l 512
 ```
@@ -101,23 +98,22 @@ make -j4
 | 参数名                              | 缩写 | 参数值 |
 | ----------------------------------- | ---- | ------ |
 | vocab_size                          | v    | 32000  |
-| batch_size                          | b    | 64     |
-| input sequence length               | s    | 512    |
-| output sequence length              | n    | 512    |
+| batch_size                          | b    | 48     |
+| max input sequence length           | s    | 68     |
+| max output sequence length          | n    | 512    |
 | hidden dimension of the transformer | h1   | 4096   |
 | hidden dimension of the second MLP  | h2   | 11008  |
-| total number of transformer blocks  | L    | 32     |
+| total number of transformer blocks  | L    | 32A    |
 
 |              |                    | 参数量                        | 数据类型 | 内存（G） |
 | ------------ | ------------------ | ----------------------------- | -------- | --------- |
-| Embedding    |                    | vh1                           | BF16     | 0.2       |
+| Embedding    |                    | vh1                           | FP32     | 0.5       |
 | 模型权重     |                    | (4h1h1+2h1 + 3h1h2)L + vh1+h1 | FP16     | 12.3      |
 |              | **self-attention** | (4h1h1+h1)L                   | FP16     | 4         |
 |              | **MLP**            | (3h1h2+h1)L                   | FP16     | 8.1       |
 |              | head               | vh1+h1                        | FP16     | 0.2       |
-| **KV cache** | batch_size=64      | 2bh1L(s+n)                    | FP32     | 64        |
-|              | batch_size=1       | 2h1L(s+n)                     | FP32     | 1         |
-| 中间激活值   | prefill阶段        | bs(8h1+2h2+(s+n)+v)           | FP32     | 10.8      |
+| **KV cache** |                    | 2bh1L[(s+n)%128]*128          | FP32     | **30**    |
+| 中间激活值   | prefill阶段        | bs(8h1+2h2+(s+n)+v)           | FP32     | 1.1       |
 |              | decoding阶段       | b(8h1+2h2+(1+n)+v)            | FP32     | 0.02      |
 
 
