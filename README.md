@@ -14,24 +14,21 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 
 ✅动态Batch
 
-✅Weight-only 量化
+✅量化
 
-- Per-row 
-- Int8
+- FP16, BF16
+- Per-row INT8
 
-✅GPU算子优化
-
-- SoftMax: Online Normalizer, reduce R/W, Memory Coalscing，Avoid Warp Divergence etc.
-- GEMM: cuBLAS
+✅GPU
+- 调度
+- 算子优化
+  - SoftMax: Online Normalizer, reduce R/W, Memory Coalscing，Avoid Warp Divergence etc.
+  - GEMM: cuBLAS
+- 显存池
 
 ✅CPU算子优化
 
 - 多线程，SIMD，Cache Locality，Tile，Avoid False Sharing
-
-✅显存管理
-
-- 显存池
-- 不同层激活值显存复用
 
 
 ## 性能测试
