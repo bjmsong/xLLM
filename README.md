@@ -79,7 +79,7 @@ python scripts/export_tokenizer.py /pathto/tokenizer.bin
 ```bash
 # 使用GPU
 mkdir build-cuda && cd build-cuda
-cmake .. -DUSE_CUDA=ON
+cmake .. -DUSE_CUDA=ON -DCUDA_ARCHITECTURES=75
 make -j4
 
 # 不使用GPU

@@ -113,7 +113,7 @@ def tofile(exportPath,
     for key in dict:
         ori_np_data_type = np.float32
         to_data_type = 0
-        # 只对linear层做了量化
+        # 只对linear层做了量化!
         if (weight_type_dict.get(key, None) == "linear"):
             to_data_type = data_type_dict[dtype]
             if (dtype == "float16"):

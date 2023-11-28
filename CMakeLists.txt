@@ -21,7 +21,7 @@ if (USE_CUDA)
     set(XLLM_CUDA_SOURCES src/cuda/cudadevice.cpp src/cuda/xllm-cuda.cu)
     set(XLLM_LINKED_LIBS ${XLLM_LINKED_LIBS} cublas)
     link_directories(/usr/local/cuda/lib64)
-    set(CMAKE_CUDA_ARCHITECTURES "native")
+    set(CMAKE_CUDA_ARCHITECTURES "${CUDA_ARCHITECTURES}")
 endif()
 
 set(XLLM_CXX_SOURCES src/param.cpp src/data.cpp src/xllm.cpp src/model.cpp
