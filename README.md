@@ -2,7 +2,8 @@
 
 ![running](./data/XLLM.gif)
 
-llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。在4090单卡上llama2-7b（FP16）推理速度可达5000+ tokens/s，A100支持不同长度的输入batch达160以上。支持CPU、GPU推理。支持流式对话，BPE编码。无第三方依赖，代码结构清晰，提供单元测试。
+llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。
+在4090单卡上llama2-7b（FP16）推理速度可达5000+ tokens/s，A100支持不同长度的输入batch达160以上。
 
 为提升推理性能，支持以下优化手段：
 
@@ -10,10 +11,11 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 
 ✅ 动态Batch
 
-✅ 权重量化
+✅ 模型权重量化
 
 ✅ 高性能算子：GPU、CPU
 
+支持流式对话，BPE编码。无第三方依赖，代码结构清晰。
 
 ## 性能测试
 
