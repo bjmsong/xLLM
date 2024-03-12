@@ -6,29 +6,13 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 
 为提升推理性能，支持以下优化手段：
 
-✅ KV Cache
+✅ KV Cache：动态扩容、量化、GQA
 
-- 动态扩容
-- 量化
-- GQA
+✅ 动态Batch
 
-✅动态Batch
+✅ 权重量化
 
-✅量化
-
-- FP16, BF16
-- Per-row INT8
-
-✅GPU
-- 调度
-- 算子优化
-  - SoftMax: Online Normalizer, reduce R/W, Memory Coalscing，Avoid Warp Divergence etc.
-  - GEMM: cuBLAS
-- 显存池
-
-✅CPU算子优化
-
-- 多线程，SIMD，Cache Locality，Tile，Avoid False Sharing
+✅ 高性能算子：GPU、CPU
 
 
 ## 性能测试
