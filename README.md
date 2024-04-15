@@ -9,9 +9,9 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 
 ✅ MHA
 
-✅ KV Cache：动态扩容、量化、GQA
+✅ KV Cache：动态扩容、量化
 
-✅ 动态Batch
+✅ Iteration Level的调度
 
 ✅ RoPE
 
