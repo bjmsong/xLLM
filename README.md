@@ -15,7 +15,7 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 
 ✅ RoPE
 
-✅ 模型权重量化
+✅ W8A8量化
 
 ✅ 高性能算子：GPU、CPU
 
