@@ -5,19 +5,40 @@
 llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行了二次开发。
 在4090单卡上llama2-7b（FP16）推理速度可达166+ tokens/s。
 
-为提升推理性能，支持以下优化手段：
+支持以下特性：
+
+✅ MHA
 
 ✅ KV Cache：动态扩容、量化、GQA
 
 ✅ 动态Batch
 
+✅ RoPE
+
 ✅ 模型权重量化
 
 ✅ 高性能算子：GPU、CPU
 
-支持流式对话，BPE编码。无第三方依赖，代码结构清晰。
+✅ BPE编码
+
+✅ 流式对话
+
+无第三方依赖，代码结构清晰。
 
 ## 性能测试
+```bash
+# MAX OUTPUT LEN = 512, INPUT LEN = Repeat([5, 13, 27, 51])
+./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32 -l 512
+```
+
+| 吞吐（tokens/s） | 1581       |
+| ---------------- | --------- |
+| 模型             | llama2-7B |
+| 精度             | FP16      |
+| GPU              | 4090      |
+| 显存（G）        | 24        |
+| batch_size       | 72        |
+
 ```bash
 # sample from shareGPT, input length range from to 13 to 900
 ./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/shareGPT_sample.txt -t 32 -l 1024
@@ -31,18 +52,6 @@ llama2推理加速库，基于[fastllm](https://github.com/ztxz16/fastllm)进行
 | 显存（G）        | 24        |
 | batch_size       | 12        |
 
-```bash
-# MAX OUTPUT LEN = 512, INPUT LEN = Repeat([5, 13, 27, 51])
-./benchmark_batch --weight /pathto/llama2_7b_chat.bin --token /pathto/tokenizer.bin --file ../benchmark/prompts.txt -t 32 -l 512
-```
-
-| 吞吐（tokens/s） | 1581       |
-| ---------------- | --------- |
-| 模型             | llama2-7B |
-| 精度             | FP16      |
-| GPU              | 4090      |
-| 显存（G）        | 24        |
-| batch_size       | 72        |
 
 ## 快速开始
 1. 导出模型
