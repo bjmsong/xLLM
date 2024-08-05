@@ -269,18 +269,18 @@ void xllmCudaMemcpy2DDeviceToDevice(void * 	dst, size_t 	dpitch, const void * 	s
     // cudaDeviceSynchronize();
 }
 
-template <int THREAD_PER_BLOCK>
-__global__ void xllmRMSNormKernelInner1(float *input, float *weight, float *output, int outer, int channels, float eps) {
+template <int SHARE_MEM_SIZE>
+__global__ void xllmRMSNormKernelInner1(float *input, float *weight, float *output, int outer, int tokens, float eps) {
     int o = blockIdx.x;
-    input = input + o * channels;
-    output = output + o * channels;
+    input = input + o * tokens;
+    output = output + o * tokens;
 
-    // 1. 计算平方和：每个线程计算一部分
-    __shared__ float sdata2[THREAD_PER_BLOCK];  // share memory
+    // 1. 计算平方和
+    __shared__ float sdata2[SHARE_MEM_SIZE];  // share memory
     unsigned int tid = threadIdx.x;
     float sum2 = 0.0;
 #pragma unroll
-    for (int i = tid; i < channels; i += blockDim.x) {
+    for (int i = tid; i < tokens; i += blockDim.x) {
         float x = input[i];
         sum2 += x * x;
     }
@@ -298,12 +298,12 @@ __global__ void xllmRMSNormKernelInner1(float *input, float *weight, float *outp
     // 3. 计算参数
     __shared__ float scale;
     if (tid == 0) {
-        scale = 1.0 / sqrt(sdata2[0] / channels + eps);
+        scale = 1.0 / sqrt(sdata2[0] / tokens + eps);
     }
     __syncthreads();
 
 #pragma unroll
-    for (int i = tid; i < channels; i += blockDim.x) {
+    for (int i = tid; i < tokens; i += blockDim.x) {
         output[i] = (input[i] * scale * weight[i]);
     }
 }
@@ -316,14 +316,15 @@ bool xllmCudaRMSNorm(const xllm::Data &input, xllm::Data &weight, xllm::Data &ou
     int dimsLen = input.dims.size();
     int axis = dimsLen - 1;
     int outer = input.Count(0) / input.Count(axis);
-    int channels = input.dims[axis];
+    int tokens = input.dims[axis];
 
-    if (channels < 64) {
-        xllmRMSNormKernelInner1<1> <<< outer, 1 >>>(cudaInput, (float *) weight.cudaData, cudaOutput, outer, channels, eps);
-    } else if (channels < 512) {
-        xllmRMSNormKernelInner1<64> <<< outer, 64 >>>(cudaInput, (float *) weight.cudaData, cudaOutput, outer, channels, eps);
+    // 一个Block计算一个token的数据，一个线程负责一部分数据
+    if (tokens < 64) {
+        xllmRMSNormKernelInner1<1> <<< outer, 1 >>>(cudaInput, (float *) weight.cudaData, cudaOutput, outer, tokens, eps);
+    } else if (tokens < 512) {
+        xllmRMSNormKernelInner1<64> <<< outer, 64 >>>(cudaInput, (float *) weight.cudaData, cudaOutput, outer, tokens, eps);
     } else {
-        xllmRMSNormKernelInner1<512> <<< outer, 512 >>>(cudaInput, (float *) weight.cudaData, cudaOutput, outer, channels, eps);
+        xllmRMSNormKernelInner1<512> <<< outer, 512 >>>(cudaInput, (float *) weight.cudaData, cudaOutput, outer, tokens, eps);
     }
 
     xllmCudaFinishInput(input, cudaInput);
